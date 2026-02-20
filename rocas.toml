@@ -1,0 +1,10 @@
+[watcher]
+watcher_path = "/home/chiko/Downloads"
+
+[[rules]]
+patterns = ["*.pdf", "*.docx", "*.txt"]
+destination = "/home/chiko/docs"
+
+[[rules]]
+patterns = ["*.jpg", "*.png", "*.gif"]
+destination = "/home/chiko/images"

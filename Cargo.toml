@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["rocas", "watcher"]
+
+
+# [package]
+# name = "rocas"
+# version = "0.1.0"
+# edition = "2024"
+
+# [dependencies.forgeconf]
+# version = "0.4.1"
+# features = ["toml", "miette", "validators"]
+# default-features = false
