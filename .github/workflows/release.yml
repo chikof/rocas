@@ -51,6 +51,8 @@ jobs:
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: "-C target-cpu=native"
 
       - name: Rename binary (Unix)
         if: matrix.os != 'windows-latest'
