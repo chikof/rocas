@@ -18,18 +18,15 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: rocas
-            asset_name: rocas-linux
-
+            asset_name: rocas-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: rocas
-            asset_name: rocas-macos
-
+            asset_name: rocas-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rocas.exe
-            asset_name: rocas.exe
-
+            asset_name: rocas-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,14 +51,21 @@ jobs:
         env:
           RUSTFLAGS: "-C target-cpu=native"
 
-      - name: Rename binary (Unix)
+      - name: Pack with UPX (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+        run: |
+          sudo apt-get install -y upx || brew install upx
+          upx --best --lzma target/${{ matrix.target }}/release/rocas
 
-      - name: Rename binary (Windows)
+      - name: Package (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          tar czf ${{ matrix.asset_name }} -C target/${{ matrix.target }}/release ${{ matrix.artifact_name }}
+
+      - name: Package (Windows)
         if: matrix.os == 'windows-latest'
-        run: copy target\${{ matrix.target }}\release\${{ matrix.artifact_name }} ${{ matrix.asset_name }}
-        shell: cmd
+        run: |
+          Compress-Archive -Path target/${{ matrix.target }}/release/${{ matrix.artifact_name }} -DestinationPath ${{ matrix.asset_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -73,7 +77,6 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,8 +94,6 @@ jobs:
         id: changelog
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          # Extracts the section between this tag and the previous one in CHANGELOG.md
-          # Falls back to a generic message if no CHANGELOG.md exists
           if [ -f CHANGELOG.md ]; then
             NOTES=$(awk "/^## \[?${TAG}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
           else
@@ -108,8 +109,8 @@ jobs:
           name: ${{ github.ref_name }}
           body: ${{ steps.changelog.outputs.notes }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }} # v1.0.0-beta counts as prerelease
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            artifacts/rocas-linux
-            artifacts/rocas-macos
-            artifacts/rocas.exe
+            artifacts/rocas-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
+            artifacts/rocas-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
+            artifacts/rocas-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip

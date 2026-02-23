@@ -1,27 +1,14 @@
+use self_update::cargo_crate_version;
+
 pub enum Command {
     Run,
     Setup,
     Unsetup,
-    PostUpdate(String), // holds the old exe path
 }
 
 impl Command {
     pub fn from_args() -> Self {
         let args: Vec<String> = std::env::args().collect();
-
-        if let Some(pos) = args
-            .iter()
-            .position(|a| a == "--post-update")
-        {
-            let old_exe = args
-                .get(pos + 1)
-                .cloned()
-                .unwrap_or_else(|| {
-                    error!("--post-update requires a path argument");
-                    std::process::exit(1);
-                });
-            return Command::PostUpdate(old_exe);
-        }
 
         match args
             .get(1)
@@ -29,6 +16,10 @@ impl Command {
         {
             Some("--setup") => Command::Setup,
             Some("--unsetup") => Command::Unsetup,
+            Some("--version") => {
+                println!("Rocas version {}", cargo_crate_version!());
+                std::process::exit(0);
+            },
             _ => Command::Run,
         }
     }

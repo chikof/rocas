@@ -15,6 +15,9 @@ pub struct Config {
 
     #[field(name = "rules")]
     pub rules: Vec<RuleConfig>,
+
+    #[field(name = "misc")]
+    pub misc: MiscConfig,
 }
 
 #[forgeconf]
@@ -30,6 +33,15 @@ pub struct WatcherConfig {
 
     #[field(default = None)]
     pub max_depth: Option<usize>,
+}
+
+#[forgeconf]
+pub struct MiscConfig {
+    #[field(default = true)]
+    pub check_for_updates: bool,
+
+    #[field(default = false)]
+    pub auto_update: bool,
 }
 
 #[forgeconf]
