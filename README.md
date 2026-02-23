@@ -49,6 +49,9 @@ Please place the `config.toml` file in the same directory as the Rocas executabl
 Contributions are welcome! Please fork the repository and submit a pull request with your changes.
 For major changes, please open an issue first to discuss what you would like to change.
 
+## Credits
+- [@prdgn52627](https://discord.com/users/726913634516860971) - Name and logo
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
