@@ -4,11 +4,29 @@ use forgeconf::forgeconf;
 use crate::pattern::Pattern;
 
 pub fn downloads_path() -> String {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    format!("{}/Downloads", home)
+    let dir = dirs::download_dir();
+
+    if let Some(dir) = dir {
+        return dir.to_str().unwrap_or(".").to_string();
+    }
+
+    warn!("Could not determine downloads directory. Defaulting to current directory.");
+    ".".to_string()
 }
 
-#[forgeconf(config(path = "rocas.toml"))]
+pub fn config_path() -> String {
+    let dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("rocas");
+    let config_name = "rocas.toml";
+
+    dir.join(config_name)
+        .to_str()
+        .unwrap_or(config_name)
+        .to_string()
+}
+
+#[forgeconf(config(path = config_path()))]
 pub struct Config {
     #[field(name = "watcher")]
     pub watcher: WatcherConfig,
@@ -42,6 +60,27 @@ pub struct MiscConfig {
 
     #[field(default = false)]
     pub auto_update: bool,
+
+    #[field(
+        default = "info".to_string(),
+        validate = forgeconf::validators::one_of(
+            ["trace".to_string(), "debug".to_string(), "info".to_string(), "warn".to_string(), "error".to_string()]
+        )
+    )]
+    pub log_level: String,
+}
+
+impl MiscConfig {
+    pub fn log_level(&self) -> log::LevelFilter {
+        match self.log_level.to_lowercase().as_str() {
+            "trace" => log::LevelFilter::Trace,
+            "debug" => log::LevelFilter::Debug,
+            "info" => log::LevelFilter::Info,
+            "warn" => log::LevelFilter::Warn,
+            "error" => log::LevelFilter::Error,
+            _ => log::LevelFilter::Info,
+        }
+    }
 }
 
 #[forgeconf]

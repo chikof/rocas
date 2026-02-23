@@ -19,12 +19,8 @@ impl Pattern {
 
 /// Simple glob matching supporting '*', '**', and '?'
 fn glob_match(pattern: &str, input: &str) -> bool {
-    let p: Vec<char> = pattern
-        .chars()
-        .collect();
-    let s: Vec<char> = input
-        .chars()
-        .collect();
+    let p: Vec<char> = pattern.chars().collect();
+    let s: Vec<char> = input.chars().collect();
 
     glob_recurse(&p, &s, 0, 0)
 }

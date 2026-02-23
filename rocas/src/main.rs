@@ -18,10 +18,7 @@ extern crate log;
 fn app_path() -> Result<String, Box<dyn std::error::Error>> {
     let path = std::env::current_exe()?;
 
-    Ok(path
-        .to_str()
-        .unwrap_or("")
-        .to_string())
+    Ok(path.to_str().unwrap_or("").to_string())
 }
 
 fn auto() -> Result<AutoLaunch, Box<dyn std::error::Error>> {
@@ -35,8 +32,10 @@ fn auto() -> Result<AutoLaunch, Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::loader().with_config().load()?;
+
     env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Info) // default level
+        .filter_level(config.misc.log_level()) // default level
         .parse_env("ROCAS_LOG") // can override with ROCAS_LOG=debug
         .format_timestamp_secs()
         .init();
@@ -52,26 +51,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => error!("Failed to remove autostart: {}", e),
         },
 
-        Command::Run => run()?,
+        Command::Run => run(&config)?,
     }
 
     Ok(())
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::loader()
-        .with_config()
-        .load()?;
-
-    if config
-        .misc
-        .check_for_updates
-    {
-        check_for_updates(
-            config
-                .misc
-                .auto_update,
-        )?;
+fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    if config.misc.check_for_updates {
+        check_for_updates(config.misc.auto_update)?;
     }
 
     let compiled_rules: Vec<(Vec<Pattern>, &RuleConfig)> = config
@@ -81,31 +69,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let watcher = Watcher::watch(
-        &config
-            .watcher
-            .watch_path,
+        &config.watcher.watch_path,
         watcher::WatcherConfig {
-            recursive: config
-                .watcher
-                .recursive,
-            interval: Duration::from_millis(
-                config
-                    .watcher
-                    .interval_millis,
-            ),
-            max_depth: config
-                .watcher
-                .max_depth,
+            recursive: config.watcher.recursive,
+            interval: Duration::from_millis(config.watcher.interval_millis),
+            max_depth: config.watcher.max_depth,
         },
     );
 
-    info!(
-        "Watching {} (v{})",
-        config
-            .watcher
-            .watch_path,
-        cargo_crate_version!()
-    );
+    info!("Watching {} (v{})", config.watcher.watch_path, cargo_crate_version!());
 
     for event in &watcher.rx {
         let path = match &event {
@@ -117,22 +89,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("");
-        let full = path
-            .to_str()
-            .unwrap_or("");
+        let full = path.to_str().unwrap_or("");
 
         for (patterns, rule) in &compiled_rules {
             let matched = patterns
                 .iter()
-                .any(|p| {
-                    if p.raw
-                        .contains('/')
-                    {
-                        p.matches(full)
-                    } else {
-                        p.matches(filename)
-                    }
-                });
+                .any(|p| if p.raw.contains('/') { p.matches(full) } else { p.matches(filename) });
 
             if matched {
                 info!("Matched '{}' -> moving to '{}'", path.display(), rule.destination);

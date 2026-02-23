@@ -512,8 +512,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 [[package]]
 name = "forgeconf"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b82c3fa05bdd61b991d310d92a71d14daf1f9d4075b065eafa42cdc83927be0"
+source = "git+https://github.com/chikof/forgeconf?rev=2cfb91488e09945e99eba90c995d38ea043c80d5#2cfb91488e09945e99eba90c995d38ea043c80d5"
 dependencies = [
  "forgeconf_core",
  "forgeconf_macros",
@@ -522,8 +521,7 @@ dependencies = [
 [[package]]
 name = "forgeconf_core"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2abac6d3b8cd95d45e7ad7e7e61f119eb960f5ffa0eb6e75e49cb44c164f4c3b"
+source = "git+https://github.com/chikof/forgeconf?rev=2cfb91488e09945e99eba90c995d38ea043c80d5#2cfb91488e09945e99eba90c995d38ea043c80d5"
 dependencies = [
  "miette",
  "thiserror",
@@ -533,8 +531,7 @@ dependencies = [
 [[package]]
 name = "forgeconf_macros"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f72e217730be51c8a9d700df2fca13a33b1d24341837ac42e1f3d9ea165c495e"
+source = "git+https://github.com/chikof/forgeconf?rev=2cfb91488e09945e99eba90c995d38ea043c80d5#2cfb91488e09945e99eba90c995d38ea043c80d5"
 dependencies = [
  "forgeconf_core",
  "proc-macro2",
@@ -1667,9 +1664,10 @@ dependencies = [
 
 [[package]]
 name = "rocas"
-version = "1.0.1"
+version = "1.1.1"
 dependencies = [
  "auto-launch",
+ "dirs",
  "env_logger",
  "forgeconf",
  "log",

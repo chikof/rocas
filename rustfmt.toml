@@ -25,7 +25,7 @@ format_strings = true
 match_arm_leading_pipes = "Preserve"
 match_block_trailing_comma = true
 trailing_comma = "Vertical"
-chain_width = 0
+chain_width = 40
 
 # Miscellaneous
 condense_wildcard_suffixes = true
