@@ -7,4 +7,4 @@ destination = "/home/chiko/docs"
 
 [[rules]]
 patterns = ["*.jpg", "*.png", "*.gif"]
-destination = "/home/chiko/images"
+destination = "/home/chiko/Pictures"

@@ -1,12 +1,11 @@
 use std::path::Path;
-use std::time::Duration;
 
 use auto_launch::{AutoLaunch, AutoLaunchBuilder};
 use cli::Command;
 use config::{Config, RuleConfig};
 use pattern::Pattern;
 use self_update::cargo_crate_version;
-use watcher::{WatchEvent, Watcher};
+use watcher::{DirWatcher, FileEvent, WatcherConfig};
 
 mod cli;
 mod config;
@@ -14,22 +13,6 @@ mod pattern;
 
 #[macro_use]
 extern crate log;
-
-fn app_path() -> Result<String, Box<dyn std::error::Error>> {
-    let path = std::env::current_exe()?;
-
-    Ok(path.to_str().unwrap_or("").to_string())
-}
-
-fn auto() -> Result<AutoLaunch, Box<dyn std::error::Error>> {
-    Ok(AutoLaunchBuilder::new()
-        .set_app_name("Rocas")
-        .set_app_path(&app_path()?)
-        .set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent)
-        .set_windows_enable_mode(auto_launch::WindowsEnableMode::Dynamic)
-        .set_linux_launch_mode(auto_launch::LinuxLaunchMode::Systemd)
-        .build()?)
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::loader().with_config().load()?;
@@ -68,44 +51,70 @@ fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         .map(|r| (r.compiled_patterns(), r))
         .collect();
 
-    let watcher = Watcher::watch(
-        &config.watcher.watch_path,
-        watcher::WatcherConfig {
-            recursive: config.watcher.recursive,
-            interval: Duration::from_millis(config.watcher.interval_millis),
-            max_depth: config.watcher.max_depth,
-        },
-    );
+    let mut watcher = DirWatcher::new(WatcherConfig {
+        poll_interval_ms: config.watcher.interval_millis,
+        ..Default::default()
+    })?;
+
+    watcher.watch(
+        &Path::new(&config.watcher.watch_path),
+        config.watcher.recursive,
+        config.watcher.max_depth,
+    )?;
 
     info!("Watching {} (v{})", config.watcher.watch_path, cargo_crate_version!());
 
-    for event in &watcher.rx {
-        let path = match &event {
-            WatchEvent::Created(p) | WatchEvent::Modified(p) => p,
-            WatchEvent::Removed(_) => continue,
-        };
+    loop {
+        match watcher.next_event() {
+            // returns Option<FileEvent>
+            Some(event) => {
+                let path = match &event {
+                    FileEvent::Created(p) | FileEvent::Modified(p) => p,
+                    FileEvent::Deleted(_) => continue,
+                    FileEvent::Renamed { to, .. } => to,
+                };
 
-        let filename = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-        let full = path.to_str().unwrap_or("");
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                let full = path.to_str().unwrap_or("");
 
-        for (patterns, rule) in &compiled_rules {
-            let matched = patterns
-                .iter()
-                .any(|p| if p.raw.contains('/') { p.matches(full) } else { p.matches(filename) });
+                for (patterns, rule) in &compiled_rules {
+                    let matched = patterns.iter().any(|p| {
+                        if p.raw.contains('/') { p.matches(full) } else { p.matches(filename) }
+                    });
 
-            if matched {
-                info!("Matched '{}' -> moving to '{}'", path.display(), rule.destination);
-                if let Err(e) = move_file(path, &rule.destination) {
-                    error!("Failed to move '{}': {}'", path.display(), e);
+                    if matched {
+                        if let Err(e) = move_file(&path, &rule.destination) {
+                            error!("Failed to move '{}': {}'", path.display(), e);
+                        }
+                    }
                 }
-            }
+            },
+
+            None => {
+                error!("Watcher channel closed unexpectedly — exiting.");
+                break Ok(());
+            },
         }
     }
+}
 
-    Ok(())
+fn app_path() -> Result<String, Box<dyn std::error::Error>> {
+    let path = std::env::current_exe()?;
+
+    Ok(path.to_str().unwrap_or("").to_string())
+}
+
+fn auto() -> Result<AutoLaunch, Box<dyn std::error::Error>> {
+    Ok(AutoLaunchBuilder::new()
+        .set_app_name("Rocas")
+        .set_app_path(&app_path()?)
+        .set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent)
+        .set_windows_enable_mode(auto_launch::WindowsEnableMode::Dynamic)
+        .set_linux_launch_mode(auto_launch::LinuxLaunchMode::Systemd)
+        .build()?)
 }
 
 /// Moves a file to the specified destination directory, creating the directory
@@ -119,14 +128,14 @@ fn move_file(from: &Path, to_dir: &str) -> Result<(), Box<dyn std::error::Error>
         .ok_or("invalid filename")?;
     let dest = dest_dir.join(filename);
 
-    // Try rename first (fast, same filesystem)
+    // Try to rename first (fast, same filesystem)
     if std::fs::rename(from, &dest).is_err() {
         // Fall back to copy + delete (cross-filesystem)
         std::fs::copy(from, &dest)?;
         std::fs::remove_file(from)?;
     }
 
-    info!("Moved {} -> {}", from.display(), dest.display());
+    info!("Moved {} → {}", from.display(), dest.display());
     Ok(())
 }
 
@@ -143,7 +152,7 @@ fn check_for_updates(auto_update: bool) -> Result<(), Box<dyn std::error::Error>
     let current = cargo_crate_version!();
 
     if self_update::version::bump_is_greater(current, &latest.version)? {
-        info!("New version available: {} -> {}", current, latest.version);
+        info!("New version available: {} → {}", current, latest.version);
         warn!(
             "To update manually update or set the 'misc.auto_update' option in the config to true."
         );

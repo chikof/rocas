@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+log.workspace = true
+notify = "8.2.0"
+crossbeam-channel = "0.5.15"
+rustc-hash = "2.1.1"
