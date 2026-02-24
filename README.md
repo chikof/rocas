@@ -102,7 +102,7 @@ Rocas looks for its config file in the following locations depending on your OS:
 - **Linux:** `~/.config/rocas/rocas.toml`
 - **macOS:** `~/Library/Application Support/rocas/rocas.toml`
 - **Windows:** `%APPDATA%\rocas\rocas.toml`
-- **ANY:**: `./rocas.toml` (current working directory)
+- **ANY:** `./rocas.toml` (current working directory)
 
 ```toml
 [watcher]
