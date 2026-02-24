@@ -3,7 +3,7 @@
 { pkgs, craneLib }:
 
 let
-  cargoMeta = craneLib.crateNameFromCargoToml = { cargoToml = ../Cargo.toml; };
+  cargoMeta = craneLib.crateNameFromCargoToml { cargoToml = ../Cargo.toml; };
 
   commonArgs = {
     inherit (cargoMeta) name version;
