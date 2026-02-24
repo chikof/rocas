@@ -113,7 +113,8 @@ max_depth = 0                         # max recursion depth (0 for unlimited)
 
 [misc]
 log_level = "info"                    # trace | debug | info | warn | error
-check_for_updates = true
+check_for_updates = true              # check for updates on startup
+auto_update = false                   # auto update is ignored in Nix-managed installs
 
 [[rules]]
 patterns = ["*.pdf", "*.docx"]
