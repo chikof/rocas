@@ -6,7 +6,7 @@ let
   cargoMeta = craneLib.crateNameFromCargoToml { cargoToml = ../Cargo.toml; };
 
   commonArgs = {
-    inherit (cargoMeta) name version;
+    inherit (cargoMeta) pname version;
     src = craneLib.cleanCargoSource ../.;
     strictDeps = true;
     buildInputs = with pkgs; [ openssl ];
