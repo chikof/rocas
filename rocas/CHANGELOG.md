@@ -2,10 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-03-01
+
+### Bug Fixes
+- Initialise logger only once to avoid SetLoggerError
+
+
+### Features
+- Print ASCII art banner with categorised config on startup
+
+
 ## [1.3.0] - 2026-03-01
 
 ### Chores
 - Push changelog
+
+- Release
 
 
 ### Features
