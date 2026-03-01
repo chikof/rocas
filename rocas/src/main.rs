@@ -9,22 +9,34 @@ use watcher::{DirWatcher, FileEvent, WatcherConfig};
 
 mod cli;
 mod config;
+mod logger;
 mod pattern;
 
 #[macro_use]
 extern crate log;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Info) // sensible default before config loads
-        .parse_env("ROCAS_LOG") // can override with ROCAS_LOG=debug
-        .format_timestamp_secs()
-        .init();
+    // Initialise with a safe default before the config is loaded so that any
+    // error during config loading is still visible on stderr.
+    logger::Logger::init(log::LevelFilter::Info, None, 10, 3)?;
 
     let config = Config::loader().with_config().load()?;
 
-    // Re-apply the level specified in the config file now that it is loaded.
-    log::set_max_level(config.misc.log_level());
+    // Resolve the log file path: explicit config value, or the OS data dir.
+    let log_path = config
+        .misc
+        .log_file
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .or_else(|| dirs::data_dir().map(|d| d.join("rocas").join("rocas.log")));
+
+    // Re-initialise the logger now that we have the full configuration.
+    logger::Logger::init(
+        config.misc.log_level(),
+        log_path,
+        config.misc.log_max_size_mb,
+        config.misc.log_keep_files,
+    )?;
 
     match Command::from_args() {
         Command::Setup => match auto()?.enable() {

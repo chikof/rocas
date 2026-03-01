@@ -10,4 +10,4 @@ strip = true
 panic = "abort"
 
 [workspace.dependencies]
-log = "0.4.29"
+log = { version = "0.4.29", features = ["std"] }

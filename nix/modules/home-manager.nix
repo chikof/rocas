@@ -40,6 +40,9 @@ let
         check_for_updates = cfg.misc.checkForUpdates;
         auto_update = cfg.misc.autoUpdate;
         log_level = cfg.misc.logLevel;
+        log_file = cfg.misc.logFile;
+        log_max_size_mb = cfg.misc.logMaxSizeMb;
+        log_keep_files = cfg.misc.logKeepFiles;
       };
       rules = map (r: {
         patterns = r.patterns;
@@ -132,6 +135,24 @@ in
           "error"
         ];
         default = "info";
+      };
+      logFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Path to the log file. null disables file logging (stderr only).
+          Example: "${config.home.homeDirectory}/.local/share/rocas/rocas.log"
+        '';
+      };
+      logMaxSizeMb = lib.mkOption {
+        type = lib.types.int;
+        default = 10;
+        description = "Rotate the log file when it exceeds this size in megabytes. 0 disables rotation.";
+      };
+      logKeepFiles = lib.mkOption {
+        type = lib.types.int;
+        default = 3;
+        description = "Number of rotated log files to keep alongside the active log.";
       };
     };
 

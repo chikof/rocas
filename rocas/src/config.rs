@@ -103,6 +103,22 @@ pub struct MiscConfig {
         )
     )]
     pub log_level: String,
+
+    /// Path to the log file. Omit to use the OS default data directory.
+    /// Linux:   ~/.local/share/rocas/rocas.log
+    /// macOS:   ~/Library/Application Support/rocas/rocas.log
+    /// Windows: %APPDATA%\rocas\rocas.log
+    #[field(default = None)]
+    pub log_file: Option<String>,
+
+    /// Rotate the log file when it exceeds this size in megabytes.
+    #[field(default = 10)]
+    pub log_max_size_mb: u64,
+
+    /// Number of rotated log files to keep alongside the active log
+    /// (rocas.log.1, rocas.log.2, …).
+    #[field(default = 3)]
+    pub log_keep_files: u32,
 }
 
 impl MiscConfig {

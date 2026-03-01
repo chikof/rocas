@@ -93,6 +93,9 @@ systemctl --user restart rocas
 | `watcher.debounceMs`      | `50`          | Collapse rapid events for the same path within this window (ms)               |
 | `watcher.renameTimeoutMs` | `50`          | Wait this long for a rename pair before treating the source as a delete       |
 | `misc.logLevel`           | `"info"`      | `trace` `debug` `info` `warn` `error`                                         |
+| `misc.logFile`            | `null`        | Path to a log file; omit to log to stderr only                                |
+| `misc.logMaxSizeMb`       | `10`          | Rotate the log file when it exceeds this size (MB); `0` disables rotation     |
+| `misc.logKeepFiles`       | `3`           | Number of rotated log files to keep                                           |
 | `misc.checkForUpdates`    | `true`        | Check for updates on startup                                                  |
 | `rules`                   | `[]`          | List of `{ patterns, destination }` rules                                     |
 
@@ -119,6 +122,9 @@ max_depth = 1                         # max recursion depth: 0 = root only, 1 = 
 
 [misc]
 log_level = "info"                    # trace | debug | info | warn | error
+# log_file = "/var/log/rocas/rocas.log"  # omit to log to stderr only
+# log_max_size_mb = 10               # rotate when file exceeds this size (MB); 0 = no rotation
+# log_keep_files = 3                 # number of rotated files to keep
 check_for_updates = true              # check for updates on startup
 auto_update = false                   # auto update is ignored in Nix-managed installs
 
