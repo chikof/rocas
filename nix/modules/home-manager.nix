@@ -29,9 +29,12 @@ let
     lib.filterAttrsRecursive (_: v: v != null) {
       watcher = {
         watch_path = cfg.watcher.watchPath;
+        watch_paths = cfg.watcher.watchPaths;
         recursive = cfg.watcher.recursive;
         interval_millis = cfg.watcher.intervalMillis;
         max_depth = cfg.watcher.maxDepth;
+        debounce_ms = cfg.watcher.debounceMs;
+        rename_timeout_ms = cfg.watcher.renameTimeoutMs;
       };
       misc = {
         check_for_updates = cfg.misc.checkForUpdates;
@@ -81,6 +84,32 @@ in
       maxDepth = lib.mkOption {
         type = lib.types.nullOr lib.types.int;
         default = null;
+      };
+      watchPaths = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = ''
+          Additional directories to watch simultaneously. When non-empty,
+          takes precedence over watchPath. All paths share the same
+          recursive, maxDepth, and timing settings.
+        '';
+      };
+      debounceMs = lib.mkOption {
+        type = lib.types.int;
+        default = 50;
+        description = ''
+          Events within this window (ms) for the same path are collapsed
+          into one. Increase on slow network drives or when batch copy
+          tools fire many rapid events.
+        '';
+      };
+      renameTimeoutMs = lib.mkOption {
+        type = lib.types.int;
+        default = 50;
+        description = ''
+          How long to wait (ms) for a rename "To" counterpart before
+          treating the "From" as a plain delete.
+        '';
       };
     };
 
