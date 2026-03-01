@@ -52,6 +52,7 @@
             pkg-config
             cargo-release
             git-cliff
+            imagemagick
           ];
           env = {
             LAZYVIM_RUST_DIAGNOSTICS = "bacon-ls";
