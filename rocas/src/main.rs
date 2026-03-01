@@ -16,10 +16,6 @@ mod pattern;
 extern crate log;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialise with a safe default before the config is loaded so that any
-    // error during config loading is still visible on stderr.
-    logger::Logger::init(log::LevelFilter::Info, None, 10, 3)?;
-
     let config = Config::loader().with_config().load()?;
 
     // Resolve the log file path: explicit config value, or the OS data dir.
@@ -30,7 +26,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(std::path::PathBuf::from)
         .or_else(|| dirs::data_dir().map(|d| d.join("rocas").join("rocas.log")));
 
-    // Re-initialise the logger now that we have the full configuration.
     logger::Logger::init(
         config.misc.log_level(),
         log_path,
