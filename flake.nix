@@ -50,6 +50,7 @@
             toolchain
             openssl
             pkg-config
+            cargo-release
           ];
           env = {
             LAZYVIM_RUST_DIAGNOSTICS = "bacon-ls";
