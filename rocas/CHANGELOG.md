@@ -2,10 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-01
+
+### Chores
+- Push changelog
+
+
+### Features
+- Add custom file logger with rotation
+
+
 ## [1.2.3] - 2026-03-01
 
 ### Bug Fixes
 - **release:** Fix cargo-release config and generate changelog
+
+
+### Chores
+- Release
 
 
 ### Features
