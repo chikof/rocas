@@ -40,8 +40,16 @@ pub struct Config {
 
 #[forgeconf]
 pub struct WatcherConfig {
+    /// Single directory to watch. Used when `watch_paths` is empty.
+    /// Defaults to the OS downloads directory.
     #[field(default = downloads_path())]
     pub watch_path: String,
+
+    /// Multiple directories to watch simultaneously. When non-empty this takes
+    /// precedence over `watch_path`. All directories share the same
+    /// `recursive`, `max_depth`, and timing settings.
+    #[field(default = Vec::new())]
+    pub watch_paths: Vec<String>,
 
     #[field(default = true)]
     pub recursive: bool,
@@ -51,6 +59,33 @@ pub struct WatcherConfig {
 
     #[field(default = None)]
     pub max_depth: Option<usize>,
+
+    /// Events within this window (in milliseconds) for the same path are
+    /// collapsed into one. Increase on slow network drives or when batch
+    /// copy tools fire many rapid events.
+    #[field(default = 50)]
+    pub debounce_ms: u64,
+
+    /// How long to wait (in milliseconds) for a rename "To" counterpart before
+    /// treating the "From" as a plain delete.
+    #[field(default = 50)]
+    pub rename_timeout_ms: u64,
+}
+
+impl WatcherConfig {
+    /// Returns the effective list of directories to watch. If `watch_paths` is
+    /// non-empty it is used as-is; otherwise the single `watch_path` is
+    /// returned as a one-element list.
+    pub fn effective_paths(&self) -> Vec<&str> {
+        if !self.watch_paths.is_empty() {
+            self.watch_paths
+                .iter()
+                .map(String::as_str)
+                .collect()
+        } else {
+            vec![self.watch_path.as_str()]
+        }
+    }
 }
 
 #[forgeconf]

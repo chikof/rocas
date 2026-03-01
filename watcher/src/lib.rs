@@ -15,6 +15,8 @@ use notify::{
 };
 use rustc_hash::FxHashMap;
 
+type WatchedRoots = Arc<std::sync::RwLock<Vec<(PathBuf, Option<usize>)>>>;
+
 #[derive(Debug, Clone)]
 pub enum FileEvent {
     Created(PathBuf),
@@ -85,7 +87,7 @@ pub struct DirWatcher {
     watcher: RecommendedWatcher,
     receiver: Receiver<FileEvent>,
     // Maps each watched root → its configured max_depth
-    watched_roots: Arc<std::sync::RwLock<Vec<(PathBuf, Option<usize>)>>>,
+    watched_roots: WatchedRoots,
 }
 
 impl DirWatcher {
@@ -101,8 +103,7 @@ impl DirWatcher {
         let rename_timeout = Duration::from_millis(config.rename_timeout_ms);
         let debounce_interval = Duration::from_millis(config.debounce_ms);
 
-        let watched_roots: Arc<std::sync::RwLock<Vec<(PathBuf, Option<usize>)>>> =
-            Arc::new(std::sync::RwLock::new(Vec::new()));
+        let watched_roots: WatchedRoots = Arc::new(std::sync::RwLock::new(Vec::new()));
         let roots_for_thread = Arc::clone(&watched_roots);
 
         std::thread::Builder::new()
@@ -129,11 +130,11 @@ impl DirWatcher {
                             let roots = roots_for_thread.read().unwrap();
 
                             // Check if a stale pending rename should be emitted as a delete.
-                            if let Some(ref r) = pending_rename {
-                                if r.is_expired(rename_timeout) {
-                                    let r = pending_rename.take().unwrap();
-                                    pending.insert(r.path.clone(), FileEvent::Deleted(r.path));
-                                }
+                            if let Some(ref r) = pending_rename
+                                && r.is_expired(rename_timeout)
+                            {
+                                let r = pending_rename.take().unwrap();
+                                pending.insert(r.path.clone(), FileEvent::Deleted(r.path));
                             }
 
                             match event.kind {
@@ -180,11 +181,11 @@ impl DirWatcher {
                                         .map(|r| r.is_expired(rename_timeout))
                                         .unwrap_or(false);
 
-                                    if expired {
-                                        if let Some(r) = pending_rename.take() {
-                                            let key = r.path.clone();
-                                            pending.insert(key, FileEvent::Deleted(r.path));
-                                        }
+                                    if expired
+                                        && let Some(r) = pending_rename.take()
+                                    {
+                                        let key = r.path.clone();
+                                        pending.insert(key, FileEvent::Deleted(r.path));
                                     }
 
                                     match (pending_rename.take(), to) {
@@ -227,11 +228,11 @@ impl DirWatcher {
 
                         recv(ticker) -> _ => {
                             // Check for a rename that never got its To counterpart.
-                            if let Some(ref r) = pending_rename {
-                                if r.is_expired(rename_timeout) {
-                                    let r = pending_rename.take().unwrap();
-                                    pending.insert(r.path.clone(), FileEvent::Deleted(r.path));
-                                }
+                            if let Some(ref r) = pending_rename
+                                && r.is_expired(rename_timeout)
+                            {
+                                let r = pending_rename.take().unwrap();
+                                pending.insert(r.path.clone(), FileEvent::Deleted(r.path));
                             }
 
                             for (_, event) in pending.drain() {

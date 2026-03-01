@@ -15,13 +15,16 @@ mod pattern;
 extern crate log;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::loader().with_config().load()?;
-
     env_logger::Builder::new()
-        .filter_level(config.misc.log_level()) // default level
+        .filter_level(log::LevelFilter::Info) // sensible default before config loads
         .parse_env("ROCAS_LOG") // can override with ROCAS_LOG=debug
         .format_timestamp_secs()
         .init();
+
+    let config = Config::loader().with_config().load()?;
+
+    // Re-apply the level specified in the config file now that it is loaded.
+    log::set_max_level(config.misc.log_level());
 
     match Command::from_args() {
         Command::Setup => match auto()?.enable() {
@@ -53,16 +56,25 @@ fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut watcher = DirWatcher::new(WatcherConfig {
         poll_interval_ms: config.watcher.interval_millis,
+        debounce_ms: config.watcher.debounce_ms,
+        rename_timeout_ms: config.watcher.rename_timeout_ms,
         ..Default::default()
     })?;
 
-    watcher.watch(
-        &Path::new(&config.watcher.watch_path),
-        config.watcher.recursive,
-        config.watcher.max_depth,
-    )?;
+    let watch_paths = config.watcher.effective_paths();
+    for path in &watch_paths {
+        watcher.watch(Path::new(path), config.watcher.recursive, config.watcher.max_depth)?;
+    }
 
-    info!("Watching {} (v{})", config.watcher.watch_path, cargo_crate_version!());
+    info!(
+        "Watching {} director{} (v{})",
+        watch_paths.len(),
+        if watch_paths.len() == 1 { "y" } else { "ies" },
+        cargo_crate_version!()
+    );
+    for path in &watch_paths {
+        info!("  {}", path);
+    }
 
     loop {
         match watcher.next_event() {
@@ -78,17 +90,27 @@ fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("");
-                let full = path.to_str().unwrap_or("");
 
+                // Normalize to forward slashes so glob patterns work on Windows
+                // (where Path::to_str() returns backslash-separated paths).
+                let full = path
+                    .to_str()
+                    .unwrap_or("")
+                    .replace('\\', "/");
+
+                // Use the first matching rule only. Without `break`, a second
+                // matching rule would attempt to move an already-moved file and
+                // log a spurious error.
                 for (patterns, rule) in &compiled_rules {
                     let matched = patterns.iter().any(|p| {
-                        if p.raw.contains('/') { p.matches(full) } else { p.matches(filename) }
+                        if p.raw.contains('/') { p.matches(&full) } else { p.matches(filename) }
                     });
 
                     if matched {
-                        if let Err(e) = move_file(&path, &rule.destination) {
-                            error!("Failed to move '{}': {}'", path.display(), e);
+                        if let Err(e) = move_file(path, &rule.destination) {
+                            error!("Failed to move '{}': {}", path.display(), e);
                         }
+                        break;
                     }
                 }
             },

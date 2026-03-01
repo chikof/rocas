@@ -106,10 +106,13 @@ Rocas looks for its config file in the following locations depending on your OS:
 
 ```toml
 [watcher]
-watch_path = "/home/chiko/Downloads"  # directory to watch
+watch_path = "/home/chiko/Downloads"  # directory to watch (single)
+# watch_paths = ["/home/chiko/Downloads", "/home/chiko/Desktop"]  # watch multiple dirs simultaneously
 recursive = true                      # watch subdirectories
 interval_millis = 1000                # polling interval in milliseconds
-max_depth = 0                         # max recursion depth (0 for unlimited)
+max_depth = 1                         # max recursion depth: 0 = root only, 1 = root + one level, omit for unlimited
+# debounce_ms = 50                    # collapse events within this window (ms); increase for slow/network drives
+# rename_timeout_ms = 50              # wait this long for a rename pair before treating From as a delete (ms)
 
 [misc]
 log_level = "info"                    # trace | debug | info | warn | error
