@@ -51,6 +51,7 @@
             openssl
             pkg-config
             cargo-release
+            git-cliff
           ];
           env = {
             LAZYVIM_RUST_DIAGNOSTICS = "bacon-ls";
