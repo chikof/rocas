@@ -18,6 +18,12 @@ self_update = { version = "0.42.0", default-features = false, features = [
   "compression-zip-deflate",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.182"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+
 [dependencies.watcher]
 version = "0.1.0"
 path = "../watcher"

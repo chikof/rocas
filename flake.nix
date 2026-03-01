@@ -56,6 +56,7 @@
           ];
           env = {
             LAZYVIM_RUST_DIAGNOSTICS = "bacon-ls";
+            # NEOVIM_RUST_TARGET = "x86_64-pc-windows-gnu";
             OPENSSL_DIR = "${pkgs.openssl.dev}";
             OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
             OPENSSL_INCLUDE_DIR = "${pkgs.openssl.dev}/include";

@@ -7,6 +7,7 @@ use pattern::Pattern;
 use self_update::cargo_crate_version;
 use watcher::{DirWatcher, FileEvent, WatcherConfig};
 
+mod art;
 mod cli;
 mod config;
 mod logger;
@@ -73,15 +74,81 @@ fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         watcher.watch(Path::new(path), config.watcher.recursive, config.watcher.max_depth)?;
     }
 
-    info!(
-        "Watching {} director{} (v{})",
+    // Build startup log messages to display alongside the ASCII art banner.
+    // We format them the same way as the logger so the output is consistent.
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let ts = logger::format_timestamp(secs);
+
+    let mut startup_msgs: Vec<String> = Vec::new();
+    let tty = logger::stderr_is_tty();
+    let dim =
+        |s: &str| -> String { if tty { format!("\x1b[2m{s}\x1b[0m") } else { s.to_string() } };
+    let info = |msg: &str| logger::format_line(&ts, log::Level::Info, "rocas", msg);
+
+    startup_msgs.push(dim("  watching"));
+    startup_msgs.push(info(&format!(
+        "  {} director{} (v{})",
         watch_paths.len(),
         if watch_paths.len() == 1 { "y" } else { "ies" },
         cargo_crate_version!()
-    );
+    )));
     for path in &watch_paths {
-        info!("  {}", path);
+        startup_msgs.push(info(&format!("    {path}")));
     }
+
+    startup_msgs.push(String::new());
+    startup_msgs.push(dim("  watcher"));
+    startup_msgs.push(info(&format!(
+        "  recursive={}  interval={}ms  debounce={}ms  rename_timeout={}ms{}",
+        config.watcher.recursive,
+        config.watcher.interval_millis,
+        config.watcher.debounce_ms,
+        config.watcher.rename_timeout_ms,
+        match config.watcher.max_depth {
+            Some(d) => format!("  max_depth={d}"),
+            None => String::new(),
+        }
+    )));
+
+    startup_msgs.push(String::new());
+    startup_msgs.push(dim("  rules"));
+    if config.rules.is_empty() {
+        startup_msgs.push(info("  (none)"));
+    } else {
+        for rule in &config.rules {
+            startup_msgs.push(info(&format!(
+                "  {} → {}",
+                rule.patterns.join(", "),
+                rule.destination
+            )));
+        }
+    }
+
+    startup_msgs.push(String::new());
+    startup_msgs.push(dim("  misc"));
+    startup_msgs.push(info(&format!(
+        "  log_level={}  check_for_updates={}  auto_update={}",
+        config.misc.log_level, config.misc.check_for_updates, config.misc.auto_update,
+    )));
+    startup_msgs.push(info(&format!(
+        "  log_file={}  max_size={}MB  keep={}",
+        config
+            .misc
+            .log_file
+            .as_deref()
+            .unwrap_or("(default)"),
+        config.misc.log_max_size_mb,
+        config.misc.log_keep_files,
+    )));
+
+    let msg_refs: Vec<&str> = startup_msgs
+        .iter()
+        .map(String::as_str)
+        .collect();
+    art::print_banner_with_messages(&msg_refs);
 
     loop {
         match watcher.next_event() {
