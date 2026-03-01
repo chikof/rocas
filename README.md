@@ -83,18 +83,18 @@ systemctl --user restart rocas
 
 #### Available Nix options
 
-| Option                      | Default       | Description                                                              |
-| --------------------------- | ------------- | ------------------------------------------------------------------------ |
-| `watcher.watchPath`         | `~/Downloads` | Primary directory to watch                                               |
-| `watcher.watchPaths`        | `[]`          | Watch multiple directories simultaneously (takes precedence over `watchPath`) |
-| `watcher.recursive`         | `true`        | Watch subdirectories                                                     |
-| `watcher.intervalMillis`    | `1000`        | Polling interval (ms)                                                    |
-| `watcher.maxDepth`          | `null`        | Max recursion depth (`null` = unlimited)                                 |
-| `watcher.debounceMs`        | `50`          | Collapse rapid events for the same path within this window (ms)          |
-| `watcher.renameTimeoutMs`   | `50`          | Wait this long for a rename pair before treating the source as a delete  |
-| `misc.logLevel`             | `"info"`      | `trace` `debug` `info` `warn` `error`                                   |
-| `misc.checkForUpdates`      | `true`        | Check for updates on startup                                             |
-| `rules`                     | `[]`          | List of `{ patterns, destination }` rules                                |
+| Option                    | Default       | Description                                                                   |
+| ------------------------- | ------------- | ----------------------------------------------------------------------------- |
+| `watcher.watchPath`       | `~/Downloads` | Primary directory to watch                                                    |
+| `watcher.watchPaths`      | `[]`          | Watch multiple directories simultaneously (takes precedence over `watchPath`) |
+| `watcher.recursive`       | `true`        | Watch subdirectories                                                          |
+| `watcher.intervalMillis`  | `1000`        | Polling interval (ms)                                                         |
+| `watcher.maxDepth`        | `null`        | Max recursion depth (`null` = unlimited)                                      |
+| `watcher.debounceMs`      | `50`          | Collapse rapid events for the same path within this window (ms)               |
+| `watcher.renameTimeoutMs` | `50`          | Wait this long for a rename pair before treating the source as a delete       |
+| `misc.logLevel`           | `"info"`      | `trace` `debug` `info` `warn` `error`                                         |
+| `misc.checkForUpdates`    | `true`        | Check for updates on startup                                                  |
+| `rules`                   | `[]`          | List of `{ patterns, destination }` rules                                     |
 
 > `misc.autoUpdate` is accepted for config compatibility but has no effect in Nix-managed installs — update rocas via `nix flake update` instead.
 
@@ -141,6 +141,7 @@ Contributions are welcome! For major changes, please open an issue first to disc
 
 ## Credits
 
+- [@Aliwizzz](https://github.com/Aliwizzz) - Windows icon and idea
 - [@prdgn52627](https://discord.com/users/726913634516860971) — Name and logo
 
 ## License
