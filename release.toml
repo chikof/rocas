@@ -1,34 +1,18 @@
-# cargo-release configuration
+# cargo-release workspace configuration
 # Usage:
 #   cargo release patch   # 1.2.1 -> 1.2.2
 #   cargo release minor   # 1.2.1 -> 1.3.0
 #   cargo release major   # 1.2.1 -> 2.0.0
 #   cargo release patch --no-confirm   # non-interactive
-#   cargo release patch --dry-run      # preview without making changes (default)
 #   cargo release patch -x             # actually execute
 #
-# Requires: cargo install cargo-release git-cliff
+# Requires: cargo-release and git-cliff in the dev shell (nix develop)
 
 # This is not published to crates.io — releases go to GitHub only.
 publish = false
 
 # Allow releasing from any branch (you own this repo solo).
 allow-branch = ["*"]
-
-# Tag format — must match the `tag_pattern` in cliff.toml and the `v*` trigger in release.yml.
-tag-name = "v{{version}}"
-tag-message = ""
-
-# Commit message for the version bump + changelog commit.
-pre-release-commit-message = "chore(release): v{{version}}"
-
-# Run git-cliff before the release commit to regenerate CHANGELOG.md.
-# cargo-release will automatically stage CHANGELOG.md alongside Cargo.toml.
-pre-release-hook = [
-  "git-cliff",
-  "--tag", "v{{version}}",
-  "--output", "CHANGELOG.md",
-]
 
 # Push the bump commit and tag to origin automatically.
 push = true

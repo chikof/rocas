@@ -1,0 +1,21 @@
+# Per-crate cargo-release configuration for the rocas binary.
+# Inherits publish/allow-branch/push from the workspace release.toml.
+
+# Tag format — must match tag_pattern in cliff.toml and the v* trigger in release.yml.
+# tag-prefix defaults to "" because rocas/ is the only released crate.
+tag-prefix = ""
+tag-name = "v{{version}}"
+tag-message = ""
+
+# Commit message for the version bump + changelog commit.
+# {{version}} is substituted correctly at crate level (non-consolidated).
+pre-release-commit-message = "chore(release): v{{version}}"
+
+# Run git-cliff before the release commit to regenerate CHANGELOG.md.
+# The hook runs from WORKSPACE_ROOT; git-cliff will write CHANGELOG.md there.
+# cargo-release automatically stages any modified tracked files before committing.
+pre-release-hook = [
+  "git-cliff",
+  "--tag", "v{{version}}",
+  "--output", "CHANGELOG.md",
+]
