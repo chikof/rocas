@@ -147,8 +147,8 @@ Contributions are welcome! For major changes, please open an issue first to disc
 
 ## Credits
 
-- [@Aliwizzz](https://github.com/Aliwizzz) - Windows icon and idea
-- [@prdgn52627](https://discord.com/users/726913634516860971) — Name and logo
+- [@Aliwizzz](https://github.com/Aliwizzz) - Logo/icon and idea
+- [@prdgn52627](https://discord.com/users/726913634516860971) — Name and banner
 
 ## License
 
