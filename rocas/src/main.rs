@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::path::Path;
 
 use auto_launch::{AutoLaunch, AutoLaunchBuilder};
