@@ -30,6 +30,6 @@ path = "../watcher"
 
 [dependencies.forgeconf]
 git = "https://github.com/chikof/forgeconf"
-rev = "2cfb91488e09945e99eba90c995d38ea043c80d5"
+rev = "a5f2c912804eee94df0b712996c9e43df6d177c4"
 features = ["toml", "miette", "validators"]
 default-features = false

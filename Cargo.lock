@@ -448,7 +448,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 [[package]]
 name = "forgeconf"
 version = "0.4.1"
-source = "git+https://github.com/chikof/forgeconf?rev=2cfb91488e09945e99eba90c995d38ea043c80d5#2cfb91488e09945e99eba90c995d38ea043c80d5"
+source = "git+https://github.com/chikof/forgeconf?rev=a5f2c912804eee94df0b712996c9e43df6d177c4#a5f2c912804eee94df0b712996c9e43df6d177c4"
 dependencies = [
  "forgeconf_core",
  "forgeconf_macros",
@@ -457,7 +457,7 @@ dependencies = [
 [[package]]
 name = "forgeconf_core"
 version = "0.4.1"
-source = "git+https://github.com/chikof/forgeconf?rev=2cfb91488e09945e99eba90c995d38ea043c80d5#2cfb91488e09945e99eba90c995d38ea043c80d5"
+source = "git+https://github.com/chikof/forgeconf?rev=a5f2c912804eee94df0b712996c9e43df6d177c4#a5f2c912804eee94df0b712996c9e43df6d177c4"
 dependencies = [
  "miette",
  "thiserror",
@@ -467,7 +467,7 @@ dependencies = [
 [[package]]
 name = "forgeconf_macros"
 version = "0.4.1"
-source = "git+https://github.com/chikof/forgeconf?rev=2cfb91488e09945e99eba90c995d38ea043c80d5#2cfb91488e09945e99eba90c995d38ea043c80d5"
+source = "git+https://github.com/chikof/forgeconf?rev=a5f2c912804eee94df0b712996c9e43df6d177c4#a5f2c912804eee94df0b712996c9e43df6d177c4"
 dependencies = [
  "forgeconf_core",
  "proc-macro2",
