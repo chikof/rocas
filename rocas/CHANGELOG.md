@@ -2,10 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-03-02
+
+### Bug Fixes
+- **deps:** Update forgeconf digest to a5f2c91 (#6)
+
+
+### Chores
+- Remove redundant /SUBSYSTEM:WINDOWS linker flag from .cargo/config.toml
+
+
 ## [1.3.1] - 2026-03-01
 
 ### Bug Fixes
 - Initialise logger only once to avoid SetLoggerError
+
+
+### Chores
+- Release
 
 
 ### Features
