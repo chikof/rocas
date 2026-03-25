@@ -1640,6 +1640,7 @@ dependencies = [
  "libc",
  "log",
  "self_update",
+ "thiserror",
  "watcher",
  "windows-sys 0.61.2",
  "winres",

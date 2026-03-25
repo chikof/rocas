@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use forgeconf::forgeconf;
 
 use crate::pattern::Pattern;
@@ -38,6 +37,7 @@ pub struct Config {
     pub misc: MiscConfig,
 }
 
+/// Configuration for the filesystem watcher.
 #[forgeconf]
 pub struct WatcherConfig {
     /// Single directory to watch. Used when `watch_paths` is empty.
@@ -77,17 +77,18 @@ impl WatcherConfig {
     /// non-empty it is used as-is; otherwise the single `watch_path` is
     /// returned as a one-element list.
     pub fn effective_paths(&self) -> Vec<&str> {
-        if !self.watch_paths.is_empty() {
+        if self.watch_paths.is_empty() {
+            vec![self.watch_path.as_str()]
+        } else {
             self.watch_paths
                 .iter()
                 .map(String::as_str)
                 .collect()
-        } else {
-            vec![self.watch_path.as_str()]
         }
     }
 }
 
+/// Miscellaneous runtime configuration (logging, update checks).
 #[forgeconf]
 pub struct MiscConfig {
     #[field(default = true)]
@@ -122,11 +123,12 @@ pub struct MiscConfig {
 }
 
 impl MiscConfig {
+    /// Parses the `log_level` string into a [`log::LevelFilter`].
+    /// Defaults to `Info` for any unrecognised value.
     pub fn log_level(&self) -> log::LevelFilter {
         match self.log_level.to_lowercase().as_str() {
             "trace" => log::LevelFilter::Trace,
             "debug" => log::LevelFilter::Debug,
-            "info" => log::LevelFilter::Info,
             "warn" => log::LevelFilter::Warn,
             "error" => log::LevelFilter::Error,
             _ => log::LevelFilter::Info,
@@ -134,6 +136,8 @@ impl MiscConfig {
     }
 }
 
+/// A single file-routing rule: files matching any `pattern` are moved to
+/// `destination`.
 #[forgeconf]
 pub struct RuleConfig {
     pub patterns: Vec<String>,
@@ -141,6 +145,10 @@ pub struct RuleConfig {
 }
 
 impl RuleConfig {
+    /// Compiles and returns all raw pattern strings as [`Pattern`] instances.
+    ///
+    /// Callers that match many files should call this once and retain the
+    /// result rather than re-compiling on every match attempt.
     pub fn compiled_patterns(&self) -> Vec<Pattern> {
         self.patterns
             .iter()
@@ -148,10 +156,18 @@ impl RuleConfig {
             .collect()
     }
 
-    #[allow(dead_code)]
+    /// Returns `true` if any rule pattern matches `path`.
+    ///
+    /// Compiles patterns inline on each call; prefer [`compiled_patterns`] once
+    /// and reusing the result in hot loops.
+    ///
+    /// [`compiled_patterns`]: RuleConfig::compiled_patterns
+    // Retained for callers outside the main event loop (e.g. tests, future CLI).
+    #[expect(dead_code, reason = "utility method kept for external callers and tests")]
     pub fn matches(&self, path: &str) -> bool {
-        self.compiled_patterns()
+        // Iterate directly over raw strings to avoid the intermediate Vec.
+        self.patterns
             .iter()
-            .any(|p| p.matches(path))
+            .any(|p| Pattern::new(p).matches(path))
     }
 }

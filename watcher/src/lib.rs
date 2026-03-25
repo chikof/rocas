@@ -1,8 +1,27 @@
+//! Debounced filesystem watcher built on top of the [`notify`] crate.
+//!
+//! # Usage
+//!
+//! ```rust,no_run
+//! use std::path::Path;
+//! use watcher::{DirWatcher, FileEvent, WatcherConfig};
+//!
+//! let mut watcher = DirWatcher::new(WatcherConfig::default()).unwrap();
+//! watcher.watch(Path::new("/tmp"), true, None).unwrap();
+//!
+//! while let Some(event) = watcher.next_event() {
+//!     println!("{:?}", event);
+//! }
+//! ```
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, bounded, select, tick};
+/// Re-exported so callers can use `watcher::Error` in their own error types
+/// without depending on `notify` directly.
+pub use notify::Error;
 use notify::event::{ModifyKind, RenameMode};
 use notify::{
     Config,
@@ -13,20 +32,28 @@ use notify::{
     Result as NotifyResult,
     Watcher,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 type WatchedRoots = Arc<std::sync::RwLock<Vec<(PathBuf, Option<usize>)>>>;
 
+/// A filesystem event emitted by [`DirWatcher`].
 #[derive(Debug, Clone)]
 pub enum FileEvent {
+    /// A new file was created at the given path.
     Created(PathBuf),
+    /// An existing file was modified at the given path.
     Modified(PathBuf),
+    /// A file was deleted from the given path.
     Deleted(PathBuf),
+    /// A file was renamed: `from` is the old path, `to` is the new path.
     Renamed { from: PathBuf, to: PathBuf },
 }
 
 impl FileEvent {
     /// Returns the primary path associated with the event.
+    ///
+    /// For renames this is the *destination* path (`to`).
+    #[must_use]
     pub fn path(&self) -> &Path {
         match self {
             FileEvent::Created(p) | FileEvent::Modified(p) | FileEvent::Deleted(p) => p,
@@ -46,13 +73,14 @@ impl PendingRename {
         Self { path, since: Instant::now() }
     }
 
-    /// A From event with no matching To within this window is treated as a
-    /// delete.
+    /// Returns `true` when the From event has waited longer than `timeout`
+    /// without receiving a matching To event (treated as a delete).
     fn is_expired(&self, timeout: Duration) -> bool {
         self.since.elapsed() > timeout
     }
 }
 
+/// Configuration for [`DirWatcher`].
 pub struct WatcherConfig {
     /// How many events the internal channel can buffer before backpressure
     /// kicks in.
@@ -65,9 +93,11 @@ pub struct WatcherConfig {
     /// Polling interval passed to notify (relevant for the fallback poll
     /// backend).
     pub poll_interval_ms: u64,
-    /// None = unlimited depth (fully recursive)
-    /// Some(0) = only the watched root itself, no subdirectories
-    /// Some(1) = root + one level of subdirectories, etc.
+    /// Depth limit for recursive watching.
+    ///
+    /// - `None` = unlimited depth (fully recursive)
+    /// - `Some(0)` = only files directly inside the watched root
+    /// - `Some(1)` = root + one level of subdirectories, etc.
     pub max_depth: Option<usize>,
 }
 
@@ -83,6 +113,7 @@ impl Default for WatcherConfig {
     }
 }
 
+/// A debounced filesystem directory watcher.
 pub struct DirWatcher {
     watcher: RecommendedWatcher,
     receiver: Receiver<FileEvent>,
@@ -91,7 +122,27 @@ pub struct DirWatcher {
 }
 
 impl DirWatcher {
-    pub fn new(config: WatcherConfig) -> NotifyResult<Self> {
+    /// Creates a new `DirWatcher` with the given configuration.
+    ///
+    /// Spawns a background `fs-event-translator` thread that debounces raw
+    /// notify events and forwards them through an internal channel.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`notify::Error`] if the underlying notify watcher cannot be
+    /// created (e.g. unsupported platform or insufficient permissions).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the background translator thread cannot be spawned (extremely
+    /// unlikely — would indicate an OS-level thread limit).
+    // The event-translation logic is inherently stateful and difficult to split
+    // further without adding unnecessary complexity.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "stateful event-translation loop; splitting would obscure the logic"
+    )]
+    pub fn new(config: &WatcherConfig) -> NotifyResult<Self> {
         // Bounded channel between notify callback → translation thread.
         // Bounded gives backpressure instead of unbounded memory growth.
         let (raw_tx, raw_rx): (Sender<NotifyResult<Event>>, Receiver<NotifyResult<Event>>) =
@@ -114,7 +165,7 @@ impl DirWatcher {
 
                 // Last event per path within the current debounce window.
                 let mut pending: FxHashMap<PathBuf, FileEvent> =
-                    FxHashMap::with_capacity_and_hasher(256, Default::default());
+                    FxHashMap::with_capacity_and_hasher(256, FxBuildHasher);
 
                 let mut pending_rename: Option<PendingRename> = None;
 
@@ -146,10 +197,11 @@ impl DirWatcher {
                                     }
                                 }
 
-
-                                EventKind::Modify(ModifyKind::Data(_))
-                                | EventKind::Modify(ModifyKind::Metadata(_))
-                                | EventKind::Modify(ModifyKind::Other) => {
+                                EventKind::Modify(
+                                    ModifyKind::Data(_)
+                                    | ModifyKind::Metadata(_)
+                                    | ModifyKind::Other,
+                                ) => {
                                     for path in event.paths {
                                         // Only downgrade to Modified if we haven't already
                                         // recorded a more significant event (Created).
@@ -175,11 +227,10 @@ impl DirWatcher {
                                 EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                                     let to = event.paths.into_iter().next();
 
-                                    // Expire check.
+                                    // Emit a delete if the From event has timed out.
                                     let expired = pending_rename
                                         .as_ref()
-                                        .map(|r| r.is_expired(rename_timeout))
-                                        .unwrap_or(false);
+                                        .is_some_and(|r| r.is_expired(rename_timeout));
 
                                     if expired
                                         && let Some(r) = pending_rename.take()
@@ -198,10 +249,7 @@ impl DirWatcher {
                                         }
                                         // No matching From — treat To as a create.
                                         (None, Some(to)) => {
-                                            pending.insert(
-                                                to.clone(),
-                                                FileEvent::Created(to),
-                                            );
+                                            pending.insert(to.clone(), FileEvent::Created(to));
                                         }
                                         _ => {}
                                     }
@@ -260,6 +308,17 @@ impl DirWatcher {
     }
 
     /// Starts watching the specified path, optionally recursively.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`notify::Error`] if the path does not exist or cannot be
+    /// watched.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal `watched_roots` lock is poisoned (only possible
+    /// if a previous thread holding the lock panicked, which cannot happen in
+    /// normal operation).
     pub fn watch(
         &mut self,
         path: &Path,
@@ -276,49 +335,58 @@ impl DirWatcher {
     }
 
     /// Stops watching the specified path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`notify::Error`] if the path is not currently being watched.
     pub fn unwatch(&mut self, path: &Path) -> NotifyResult<()> {
         self.watcher.unwatch(path)
     }
 
     /// Blocks until the next debounced event is available.
+    ///
+    /// Returns `None` when the internal channel is closed (i.e. the watcher
+    /// has been dropped).
+    #[must_use]
     pub fn next_event(&self) -> Option<FileEvent> {
         self.receiver.recv().ok()
     }
 
     /// Non-blocking: drains all currently available debounced events.
+    #[must_use]
     pub fn drain_events(&self) -> Vec<FileEvent> {
         self.receiver.try_iter().collect()
     }
 
     /// Returns a reference to the raw receiver so callers can integrate with
     /// their own `select!` or async bridge.
+    #[must_use]
     pub fn receiver(&self) -> &Receiver<FileEvent> {
         &self.receiver
     }
 }
 
-/// Returns true if the path is within the allowed depth relative to root.
-/// depth 0 = only files directly inside root
-/// depth 1 = root + one subdir level, etc.
+/// Returns `true` if `path` is within `max_depth` levels below `root`.
+///
+/// - `depth 0` = files directly inside root only
+/// - `depth 1` = root + one subdirectory level, etc.
 fn within_depth(root: &Path, path: &Path, max_depth: Option<usize>) -> bool {
-    let max = match max_depth {
-        None => return true, // unlimited
-        Some(d) => d,
+    let Some(max) = max_depth else {
+        return true; // unlimited depth
     };
 
-    // Strip the root prefix to get the relative portion
-    let relative = match path.strip_prefix(root) {
-        Ok(r) => r,
-        Err(_) => return false, // path isn't under this root at all
+    // Strip the root prefix to get the relative portion.
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false; // path isn't under this root at all
     };
 
     // Count path components. A file directly in root has 1 component.
-    // We subtract 1 so that depth=0 means "files directly in root".
+    // Subtract 1 so that depth=0 means "files directly in root".
     let components = relative.components().count();
     components > 0 && components - 1 <= max
 }
 
-/// Helper to check an event's paths against all watched roots
+/// Returns `true` if `path` is within the allowed depth of any watched root.
 fn path_allowed(path: &Path, watched_roots: &[(PathBuf, Option<usize>)]) -> bool {
     watched_roots
         .iter()

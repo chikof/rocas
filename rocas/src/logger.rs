@@ -31,6 +31,16 @@ use std::fs::{File, OpenOptions, rename};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Error returned by [`Logger::init`].
+#[derive(Debug, thiserror::Error)]
+pub enum LoggerInitError {
+    #[error("a global logger is already set: {0}")]
+    AlreadySet(#[from] log::SetLoggerError),
+    #[error("could not open log file: {0}")]
+    Io(#[from] std::io::Error),
+}
 
 const RESET: &str = "\x1b[0m";
 
@@ -117,12 +127,18 @@ impl Logger {
     /// Build and globally register the logger.
     ///
     /// `log_path` — `None` disables file logging (stderr only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`log::SetLoggerError`] if a global logger is already
+    /// registered, or [`std::io::Error`] if the log file cannot be opened
+    /// or the parent directory cannot be created.
     pub fn init(
         level: log::LevelFilter,
         log_path: Option<PathBuf>,
         max_size_mb: u64,
         keep_files: u32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), LoggerInitError> {
         enable_ansi_on_windows();
         let use_color = stderr_is_tty();
 
@@ -131,9 +147,7 @@ impl Logger {
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
-                FileLogger::new(path, max_size_mb * 1024 * 1024, keep_files)
-                    .map(Mutex::new)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                FileLogger::new(path, max_size_mb * 1024 * 1024, keep_files).map(Mutex::new)
             })
             .transpose()?;
 
@@ -154,7 +168,6 @@ impl log::Log for Logger {
             return;
         }
 
-        use std::time::{SystemTime, UNIX_EPOCH};
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -260,25 +273,25 @@ impl FileLogger {
     }
 }
 
-/// Format a Unix timestamp as `YYYY-MM-DDTHH:MM:SSZ` (UTC ISO 8601) without
+/// Formats a Unix timestamp as `YYYY-MM-DDTHH:MM:SSZ` (UTC, ISO 8601) without
 /// any external crate.
 pub fn format_timestamp(secs: u64) -> String {
-    let s = secs % 60;
-    let m = (secs / 60) % 60;
-    let h = (secs / 3600) % 24;
-    let days = secs / 86400;
+    let sec = secs % 60;
+    let min = (secs / 60) % 60;
+    let hour = (secs / 3_600) % 24;
+    let days = secs / 86_400;
 
-    // Gregorian calendar calculation.
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
+    // Gregorian calendar calculation (algorithm by Howard Hinnant).
+    let shifted = days + 719_468;
+    let era = shifted / 146_097;
+    let doe = shifted - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let year = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if mo <= 2 { y + 1 } else { y };
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { year + 1 } else { year };
 
-    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
 }
