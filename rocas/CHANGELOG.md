@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-25
+
+### Bug Fixes
+- Files used to get corrupted if they were being downloaded + few optimizations
+
+
+### Features
+- Auto restart rocas when after downloading update
+
+
 ## [1.3.2] - 2026-03-02
 
 ### Bug Fixes
@@ -10,6 +20,8 @@ All notable changes to this project will be documented in this file.
 
 ### Chores
 - Remove redundant /SUBSYSTEM:WINDOWS linker flag from .cargo/config.toml
+
+- Release
 
 
 ## [1.3.1] - 2026-03-01
