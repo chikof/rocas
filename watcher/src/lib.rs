@@ -6,7 +6,7 @@
 //! use std::path::Path;
 //! use watcher::{DirWatcher, FileEvent, WatcherConfig};
 //!
-//! let mut watcher = DirWatcher::new(WatcherConfig::default()).unwrap();
+//! let mut watcher = DirWatcher::new(&WatcherConfig::default()).unwrap();
 //! watcher.watch(Path::new("/tmp"), true, None).unwrap();
 //!
 //! while let Some(event) = watcher.next_event() {
