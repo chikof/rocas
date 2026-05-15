@@ -197,13 +197,9 @@ impl Config {
     pub fn load(klap: Command) -> Result<Self, forgeconf::ConfigError> {
         let matches = klap.get_matches();
 
-        match matches.subcommand() {
-            Some(("boot", _)) => {
-                statup_toggle().expect("startup_toggle");
-            },
-
-            _ => unreachable!(),
-        };
+        if let Some(("boot", _)) = matches.subcommand() {
+            statup_toggle().expect("startup_toggle");
+        }
 
         let res = Self::loader()
             .add_source(Self::from_clap(&matches))
