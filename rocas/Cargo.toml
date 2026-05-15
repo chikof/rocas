@@ -15,13 +15,15 @@ auto-launch = "0.6.0"
 dirs = "6.0.0"
 thiserror = "2.0.18"
 self_update = { version = "0.44.0", default-features = false, features = [
-	"reqwest",
-	"rustls",
-	"archive-tar",
-	"archive-zip",
-	"compression-flate2",
-	"compression-zip-deflate",
+    "reqwest",
+    "rustls",
+    "archive-tar",
+    "archive-zip",
+    "compression-flate2",
+    "compression-zip-deflate",
 ] }
+clap = { version = "=4.6.1", features = ["derive"] }
+clap_derive = "4.0.0-rc.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.182"
@@ -34,7 +36,7 @@ version = "0.1.0"
 path = "../watcher"
 
 [dependencies.forgeconf]
-git = "https://github.com/chikof/forgeconf"
-rev = "b4b2e01707834cea02c19978746256b3a06814e9"
-features = ["toml", "miette", "validators"]
+git = "https://github.com/chikof/forgeconf.git"
+rev = "2aed23b7a83a730def4f6672647cbbf0e22797a4"
+features = ["toml", "miette", "validators", "clap", "cli"]
 default-features = false

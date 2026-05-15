@@ -1,23 +1,16 @@
-use self_update::cargo_crate_version;
+// use self_update::cargo_crate_version;
+use clap::{Parser, Subcommand};
 
-pub enum Command {
-    Run,
-    Setup,
-    Unsetup,
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Commands>,
 }
 
-impl Command {
-    pub fn from_args() -> Self {
-        let args: Vec<String> = std::env::args().collect();
-
-        match args.get(1).map(String::as_str) {
-            Some("--setup") => Command::Setup,
-            Some("--unsetup") => Command::Unsetup,
-            Some("--version") => {
-                println!("Rocas version {}", cargo_crate_version!());
-                std::process::exit(0);
-            },
-            _ => Command::Run,
-        }
-    }
+#[derive(Subcommand, Debug, PartialEq)]
+pub enum Commands {
+    /// Configure rocas to start on boot
+    #[command(visible_alias = "b")]
+    Boot,
 }
