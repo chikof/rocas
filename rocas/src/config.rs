@@ -63,33 +63,48 @@ pub struct Config {
 pub struct WatcherConfig {
     /// Single directory to watch. Used when `watch_paths` is empty.
     /// Defaults to the OS downloads directory.
-    #[field(default = downloads_path(), help = "wawa")]
+    #[field(
+        default = downloads_path(),
+        help = "Specify the directory where rocas should look for new files"
+    )]
     pub watch_path: String,
 
     /// Multiple directories to watch simultaneously. When non-empty this takes
     /// precedence over `watch_path`. All directories share the same
     /// `recursive`, `max_depth`, and timing settings.
-    #[field(default = Vec::new())]
+    #[field(
+        default = Vec::new(),
+        help = "Multiple directories to watch simultaneously"
+    )]
     pub watch_paths: Vec<String>,
 
-    #[field(default = true)]
+    #[field(default = false, help = "Should rocas look into directories?")]
     pub recursive: bool,
 
-    #[field(default = 1000)]
+    #[field(default = 1000, help = "How often should rocas should check for new files?")]
     pub interval_millis: u64,
 
-    #[field(default = None)]
+    #[field(
+        default = None, 
+        help = "How much is rocas supposed to look into directories? Only avaiable if recursive is enabled."
+    )]
     pub max_depth: Option<usize>,
 
     /// Events within this window (in milliseconds) for the same path are
     /// collapsed into one. Increase on slow network drives or when batch
     /// copy tools fire many rapid events.
-    #[field(default = 50)]
+    #[field(
+        default = 50,
+        help = "Collapse events within this window (ms); increase for slow/network drives"
+    )]
     pub debounce_ms: u64,
 
     /// How long to wait (in milliseconds) for a rename "To" counterpart before
     /// treating the "From" as a plain delete.
-    #[field(default = 50)]
+    #[field(
+        default = 50,
+        help = "Wait this long for a rename pair before treating From as a delete (ms)"
+    )]
     pub rename_timeout_ms: u64,
 }
 
@@ -112,17 +127,24 @@ impl WatcherConfig {
 /// Miscellaneous runtime configuration (logging, update checks).
 #[forgeconf]
 pub struct MiscConfig {
-    #[field(default = true)]
+    #[field(
+        default = true,
+        help = "Should I look for updates on startup?"
+    )]
     pub check_for_updates: bool,
 
-    #[field(default = false)]
+    #[field(
+        default = false,
+        help = "Should I auto update myself?"
+    )]
     pub auto_update: bool,
 
     #[field(
         default = "info".to_string(),
         validate = forgeconf::validators::one_of(
             ["trace".to_string(), "debug".to_string(), "info".to_string(), "warn".to_string(), "error".to_string()]
-        )
+        ),
+        help = "Rocas log level trace | info | warn | error",
     )]
     pub log_level: String,
 
@@ -130,16 +152,25 @@ pub struct MiscConfig {
     /// Linux:   ~/.local/share/rocas/rocas.log
     /// macOS:   ~/Library/Application Support/rocas/rocas.log
     /// Windows: %APPDATA%\rocas\rocas.log
-    #[field(default = Some(logs_path()))]
+    #[field(
+        default = Some(logs_path()),
+        help = "Where should rocas store its log files"
+    )]
     pub log_file: Option<String>,
 
     /// Rotate the log file when it exceeds this size in megabytes.
-    #[field(default = 10)]
+    #[field(
+        default = 10,
+        help = "Max limit of a log file size in megabytes"
+    )]
     pub log_max_size_mb: u64,
 
     /// Number of rotated log files to keep alongside the active log
     /// (rocas.log.1, rocas.log.2, …).
-    #[field(default = 3)]
+    #[field(
+        default = 3,
+        help = "Number of log files to keep"
+    )]
     pub log_keep_files: u32,
 }
 
