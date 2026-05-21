@@ -30,11 +30,7 @@
           with fenix.packages.${system};
           combine [
             stable.rustc
-            stable.rust-src
             stable.cargo
-            complete.rustfmt
-            stable.clippy
-            stable.rust-analyzer
           ];
 
         craneLib = crane.overrideToolchain toolchain;
@@ -44,26 +40,6 @@
         packages.default = rocas;
         apps.default = flake-utils.lib.mkApp { drv = rocas; };
         checks.default = rocas;
-
-        devShells.default = craneLib.devShell {
-          packages = with pkgs; [
-            toolchain
-            openssl
-            pkg-config
-            cargo-release
-            git-cliff
-            imagemagick
-          ];
-          env = {
-            LAZYVIM_RUST_DIAGNOSTICS = "bacon-ls";
-            # NEOVIM_RUST_TARGET = "x86_64-pc-windows-gnu";
-            OPENSSL_DIR = "${pkgs.openssl.dev}";
-            OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
-            OPENSSL_INCLUDE_DIR = "${pkgs.openssl.dev}/include";
-            PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
-            LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib";
-          };
-        };
       }
     )
     // {

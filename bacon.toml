@@ -1,0 +1,19 @@
+# bacon: background checker (https://dystroy.org/bacon/). Flags mirror scripts/check.sh.
+default_job = "clippy"
+
+[jobs.check]
+command = ["cargo", "check", "--workspace", "--all-targets", "--all-features", "--locked", "--color", "always"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--locked", "--color", "always", "--", "-D", "warnings"]
+need_stdout = false
+
+[jobs.test]
+command = ["cargo", "test", "--workspace", "--all-features", "--locked", "--color", "always"]
+need_stdout = true
+
+[jobs.doc]
+command = ["cargo", "doc", "--workspace", "--no-deps", "--all-features", "--locked", "--color", "always"]
+env.RUSTDOCFLAGS = "-D warnings"
+need_stdout = false

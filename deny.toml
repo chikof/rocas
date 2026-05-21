@@ -1,0 +1,37 @@
+[graph]
+all-features = true
+no-default-features = false
+
+[licenses]
+confidence-threshold = 0.80
+
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Zlib",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+
+# rocas and watcher are not published (release.toml: GitHub releases only).
+[licenses.private]
+ignore = true
+
+[sources]
+unknown-registry = "deny"
+
+[advisories]
+# self_update 0.44.0, the latest release, pins zip 6 and quick-xml 0.38. Drop
+# these entries once it moves to zip >= 9 and quick-xml >= 0.41.
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 via self_update; only parses release metadata fetched from our own GitHub releases" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38 via self_update; only parses release metadata fetched from our own GitHub releases" },
+    { id = "RUSTSEC-2026-0367", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
+    { id = "RUSTSEC-2026-0429", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
+]
