@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo directories
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rocas
+
+      - name: Install cargo-deny and typos
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,typos-cli
+
+      - name: Run the gate
+        run: scripts/check.sh
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@1.88
+
+      - name: Cache cargo directories
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rocas-msrv
+
+      - name: Check on MSRV
+        run: cargo check --workspace --locked
