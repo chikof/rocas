@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
 use auto_launch::AutoLaunchBuilder;
-use clap::Command;
-use forgeconf::forgeconf;
+use forgeconf::Config as _;
 use self_update::cargo_crate_version;
 
 use crate::pattern::Pattern;
@@ -35,7 +34,6 @@ pub fn rocas_dir() -> PathBuf {
         .join("rocas")
 }
 
-#[allow(dead_code)]
 pub fn config_path() -> String {
     let config_name = "rocas.toml";
 
@@ -46,66 +44,81 @@ pub fn config_path() -> String {
         .to_string()
 }
 
-#[forgeconf(config(path = config_path()))]
+/// Builds a section whose fields all have defaults, for when its table is
+/// absent from every source.
+fn all_defaults<T: forgeconf::FromNode>() -> T {
+    forgeconf::from_str("", forgeconf::FileFormat::Toml)
+        .expect("every field of the section has a default")
+}
+
+/// Rocas watches directories and moves files into folders based on rules.
+#[derive(forgeconf::Config)]
+#[config(file(path = config_path(), optional), env_prefix = "ROCAS_")]
 pub struct Config {
-    #[field(name = "watcher", nested)]
+    #[config(default)]
     pub watcher: WatcherConfig,
 
-    #[field(name = "rules", nested)]
     pub rules: Vec<RuleConfig>,
 
-    #[field(name = "misc", nested)]
+    #[config(default)]
     pub misc: MiscConfig,
+
+    /// Toggle starting rocas on boot, then keep running
+    #[config(default, short = 'b')]
+    pub boot: bool,
 }
 
 /// Configuration for the filesystem watcher.
-#[forgeconf]
+#[derive(forgeconf::Config)]
 pub struct WatcherConfig {
-    /// Single directory to watch. Used when `watch_paths` is empty.
-    /// Defaults to the OS downloads directory.
-    #[field(
-        default = downloads_path(),
-        help = "Specify the directory where rocas should look for new files"
-    )]
+    /// Specify the directory where rocas should look for new files
+    ///
+    /// Used when `watch_paths` is empty. Defaults to the OS downloads
+    /// directory.
+    #[config(default = downloads_path())]
     pub watch_path: String,
 
-    /// Multiple directories to watch simultaneously. When non-empty this takes
-    /// precedence over `watch_path`. All directories share the same
-    /// `recursive`, `max_depth`, and timing settings.
-    #[field(
-        default = Vec::new(),
-        help = "Multiple directories to watch simultaneously"
-    )]
+    /// Multiple directories to watch simultaneously
+    ///
+    /// When non-empty this takes precedence over `watch_path`. All
+    /// directories share the same `recursive`, `max_depth`, and timing
+    /// settings.
     pub watch_paths: Vec<String>,
 
-    #[field(default = false, help = "Should rocas look into directories?")]
+    /// Should rocas look into directories?
+    #[config(default = false)]
     pub recursive: bool,
 
-    #[field(default = 1000, help = "How often should rocas should check for new files?")]
+    /// How often should rocas check for new files? (ms)
+    #[config(default = 1000)]
     pub interval_millis: u64,
 
-    #[field(
-        default = None, 
-        help = "How much is rocas supposed to look into directories? Only avaiable if recursive is enabled."
-    )]
+    /// How deep should rocas look into directories?
+    ///
+    /// Only available if recursive is enabled.
     pub max_depth: Option<usize>,
 
-    /// Events within this window (in milliseconds) for the same path are
-    /// collapsed into one. Increase on slow network drives or when batch
-    /// copy tools fire many rapid events.
-    #[field(
-        default = 50,
-        help = "Collapse events within this window (ms); increase for slow/network drives"
-    )]
+    /// Collapse events within this window (ms); increase for slow/network
+    /// drives
+    ///
+    /// Events within this window for the same path are collapsed into one.
+    /// Increase on slow network drives or when batch copy tools fire many
+    /// rapid events.
+    #[config(default = 50)]
     pub debounce_ms: u64,
 
-    /// How long to wait (in milliseconds) for a rename "To" counterpart before
-    /// treating the "From" as a plain delete.
-    #[field(
-        default = 50,
-        help = "Wait this long for a rename pair before treating From as a delete (ms)"
-    )]
+    /// Wait this long for a rename pair before treating From as a delete (ms)
+    ///
+    /// How long to wait for a rename "To" counterpart before treating the
+    /// "From" as a plain delete.
+    #[config(default = 50)]
     pub rename_timeout_ms: u64,
+}
+
+impl Default for WatcherConfig {
+    fn default() -> Self {
+        all_defaults()
+    }
 }
 
 impl WatcherConfig {
@@ -124,73 +137,84 @@ impl WatcherConfig {
     }
 }
 
+/// Verbosity of the rocas log.
+#[derive(Debug, Clone, Copy, forgeconf::Config)]
+#[config(rename_all = "lowercase")]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    /// The matching [`log::LevelFilter`].
+    pub const fn filter(self) -> log::LevelFilter {
+        match self {
+            Self::Trace => log::LevelFilter::Trace,
+            Self::Debug => log::LevelFilter::Debug,
+            Self::Info => log::LevelFilter::Info,
+            Self::Warn => log::LevelFilter::Warn,
+            Self::Error => log::LevelFilter::Error,
+        }
+    }
+}
+
 /// Miscellaneous runtime configuration (logging, update checks).
-#[forgeconf]
+#[derive(forgeconf::Config)]
 pub struct MiscConfig {
-    #[field(
-        default = true,
-        help = "Should I look for updates on startup?"
-    )]
+    /// Should I look for updates on startup?
+    #[config(default = true)]
     pub check_for_updates: bool,
 
-    #[field(
-        default = false,
-        help = "Should I auto update myself?"
-    )]
+    /// Should I auto update myself?
+    #[config(default = false)]
     pub auto_update: bool,
 
-    #[field(
-        default = "info".to_string(),
-        validate = forgeconf::validators::one_of(
-            ["trace".to_string(), "debug".to_string(), "info".to_string(), "warn".to_string(), "error".to_string()]
-        ),
-        help = "Rocas log level trace | info | warn | error",
-    )]
-    pub log_level: String,
+    /// Rocas log level
+    #[config(default = LogLevel::Info)]
+    pub log_level: LogLevel,
 
-    /// Path to the log file. Omit to use the OS default data directory.
+    /// Where should rocas store its log files
+    ///
+    /// Omit to use the OS default data directory.
     /// Linux:   ~/.local/share/rocas/rocas.log
     /// macOS:   ~/Library/Application Support/rocas/rocas.log
     /// Windows: %APPDATA%\rocas\rocas.log
-    #[field(
-        default = Some(logs_path()),
-        help = "Where should rocas store its log files"
-    )]
+    #[config(default = Some(logs_path()))]
     pub log_file: Option<String>,
 
-    /// Rotate the log file when it exceeds this size in megabytes.
-    #[field(
-        default = 10,
-        help = "Max limit of a log file size in megabytes"
-    )]
+    /// Max limit of a log file size in megabytes
+    ///
+    /// Rotate the log file when it exceeds this size.
+    #[config(default = 10)]
     pub log_max_size_mb: u64,
 
+    /// Number of log files to keep
+    ///
     /// Number of rotated log files to keep alongside the active log
     /// (rocas.log.1, rocas.log.2, …).
-    #[field(
-        default = 3,
-        help = "Number of log files to keep"
-    )]
+    #[config(default = 3)]
     pub log_keep_files: u32,
 }
 
+impl Default for MiscConfig {
+    fn default() -> Self {
+        all_defaults()
+    }
+}
+
 impl MiscConfig {
-    /// Parses the `log_level` string into a [`log::LevelFilter`].
-    /// Defaults to `Info` for any unrecognised value.
-    pub fn log_level(&self) -> log::LevelFilter {
-        match self.log_level.to_lowercase().as_str() {
-            "trace" => log::LevelFilter::Trace,
-            "debug" => log::LevelFilter::Debug,
-            "warn" => log::LevelFilter::Warn,
-            "error" => log::LevelFilter::Error,
-            _ => log::LevelFilter::Info,
-        }
+    /// The configured log level as a [`log::LevelFilter`].
+    pub const fn log_level(&self) -> log::LevelFilter {
+        self.log_level.filter()
     }
 }
 
 /// A single file-routing rule: files matching any `pattern` are moved to
 /// `destination`.
-#[forgeconf]
+#[derive(forgeconf::Config)]
 pub struct RuleConfig {
     pub patterns: Vec<String>,
     pub destination: String,
@@ -225,24 +249,17 @@ impl RuleConfig {
 }
 
 impl Config {
-    pub fn load(klap: Command) -> Result<Self, forgeconf::ConfigError> {
-        let matches = klap.get_matches();
-
-        if let Some(("boot", _)) = matches.subcommand() {
-            statup_toggle().expect("startup_toggle");
-        }
-
-        let res = Self::loader()
-            .add_source(Self::from_clap(&matches))
-            .load()?;
-
-        Ok(res)
+    /// Loads the configuration from the config file, the environment and the
+    /// command line, exiting on `--help` or on invalid input.
+    pub fn load() -> Self {
+        Self::loader().cli().load_or_exit()
     }
 
     /// Builds and prints the startup ASCII art banner with configuration
     /// summary.
     pub fn print_startup_banner(&self, watch_paths: &[&str]) {
-        // We format messages the same way as the logger so the output is consistent.
+        // We format messages the same way as the logger so the output is
+        // consistent.
         let secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -294,7 +311,13 @@ impl Config {
         msgs.push(dim("  misc"));
         msgs.push(info(&format!(
             "  log_level={}  check_for_updates={}  auto_update={}",
-            self.misc.log_level, self.misc.check_for_updates, self.misc.auto_update,
+            self.misc
+                .log_level
+                .filter()
+                .to_string()
+                .to_lowercase(),
+            self.misc.check_for_updates,
+            self.misc.auto_update,
         )));
         msgs.push(info(&format!(
             "  log_file={}  max_size={}MB  keep={}",
@@ -314,7 +337,7 @@ impl Config {
     }
 }
 
-pub fn statup_toggle() -> Result<(), AppError> {
+pub fn startup_toggle() -> Result<(), AppError> {
     let conf = AutoLaunchBuilder::new()
         .set_app_name("Rocas")
         .set_app_path(&rocas_path()?)

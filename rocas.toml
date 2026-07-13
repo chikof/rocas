@@ -1,5 +1,5 @@
 [watcher]
-watcher_path = "/home/chiko/Downloads"
+watch_path = "/home/chiko/Downloads"
 
 [[rules]]
 patterns = ["*.pdf", "*.docx", "*.txt"]

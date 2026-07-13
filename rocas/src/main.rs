@@ -3,15 +3,12 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use clap::CommandFactory;
-use cli::Cli;
 use config::{Config, RuleConfig};
 use pattern::Pattern;
 use self_update::cargo_crate_version;
 use watcher::{DirWatcher, FileEvent, WatcherConfig};
 
 mod art;
-mod cli;
 mod config;
 mod logger;
 mod pattern;
@@ -28,9 +25,6 @@ const STABLE_MAX_WAIT: Duration = Duration::from_secs(300);
 /// All errors that can occur in the rocas binary.
 #[derive(Debug, thiserror::Error)]
 enum AppError {
-    #[error("failed to load config: {0}")]
-    Config(#[from] forgeconf::ConfigError),
-
     #[error("logger initialisation failed: {0}")]
     Logger(#[from] logger::LoggerInitError),
 
@@ -54,9 +48,16 @@ enum AppError {
 }
 
 fn main() -> Result<(), AppError> {
-    let cmd = Config::augment_clap(Cli::command());
-    // let matches = cmd.get_matches();
-    let config = Config::load(cmd)?;
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("rocas {}", cargo_crate_version!());
+        return Ok(());
+    }
+
+    let config = Config::load();
+
+    if config.boot {
+        config::startup_toggle()?;
+    }
 
     // Resolve the log file path: explicit config value, or the OS data dir.
     let log_path = config
@@ -131,7 +132,8 @@ fn dispatch_event(event: &FileEvent, compiled_rules: &[(Vec<Pattern>, &RuleConfi
         .replace('\\', "/");
 
     // Use the first matching rule only. Without `break`, a second matching
-    // rule would attempt to move an already-moved file and log a spurious error.
+    // rule would attempt to move an already-moved file and log a spurious
+    // error.
     for (patterns, rule) in compiled_rules {
         let matched = patterns
             .iter()
@@ -172,7 +174,8 @@ fn wait_until_stable(path: &Path) -> Result<(), AppError> {
             Ok(meta) => {
                 let current_size = meta.len();
                 if last_size == Some(current_size) {
-                    // Size unchanged across two consecutive probes — file is stable.
+                    // Size unchanged across two consecutive probes — file is
+                    // stable.
                     break;
                 }
                 last_size = Some(current_size);

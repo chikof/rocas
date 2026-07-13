@@ -108,7 +108,8 @@ Rocas looks for its config file in the following locations depending on your OS:
 - **Linux:** `~/.config/rocas/rocas.toml`
 - **macOS:** `~/Library/Application Support/rocas/rocas.toml`
 - **Windows:** `%APPDATA%\rocas\rocas.toml`
-- **ANY:** `./rocas.toml` (current working directory)
+
+The config file is optional: if it does not exist, rocas starts with the defaults below (watching your Downloads directory, no rules).
 
 ```toml
 [watcher]
@@ -140,6 +141,23 @@ destination = "/home/chiko/Pictures"
 patterns = ["*"]                      # catch-all, matches anything not covered above
 destination = "/home/chiko/Other"
 ```
+
+### Command line and environment
+
+Every option can also be set with a command-line flag or an environment variable. Precedence, lowest to highest: config file, environment, command line.
+
+- **Flags** are the key path in kebab-case: `--watcher.recursive`, `--watcher.max-depth 2`, `--misc.log-level debug`.
+- **Environment variables** are `ROCAS_` plus the key path uppercased with `_`: `ROCAS_WATCHER_RECURSIVE=true`, `ROCAS_MISC_LOG_LEVEL=debug`. Lists are comma-separated: `ROCAS_WATCHER_WATCH_PATHS=/a,/b`.
+- `rocas --help` lists every option with its default and environment variable name.
+- `rocas --version` (or `-V`) prints the version.
+
+### Starting on boot
+
+```sh
+rocas --boot   # or: rocas -b
+```
+
+Toggles launching rocas when you log in (run it again to turn it off), then keeps running as usual. This replaces the old `rocas boot` subcommand.
 
 ## Contributing
 
