@@ -48,14 +48,23 @@ enum AppError {
 }
 
 fn main() -> Result<(), AppError> {
-    if std::env::args().any(|a| a == "--version" || a == "-V") {
+    let mut args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    if args
+        .iter()
+        .any(|a| a == "--version" || a == "-V")
+    {
         println!("rocas {}", cargo_crate_version!());
         return Ok(());
     }
+    // `--boot` is an action, not a setting, so it never reaches the config
+    // layers: a file or env value would toggle autostart on every launch.
+    let len = args.len();
+    args.retain(|a| a != "--boot" && a != "-b");
+    let boot = args.len() != len;
 
-    let config = Config::load();
+    let config = Config::load(args);
 
-    if config.boot {
+    if boot {
         config::startup_toggle()?;
     }
 

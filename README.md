@@ -146,7 +146,7 @@ destination = "/home/chiko/Other"
 
 Every option can also be set with a command-line flag or an environment variable. Precedence, lowest to highest: config file, environment, command line.
 
-- **Flags** are the key path in kebab-case: `--watcher.recursive`, `--watcher.max-depth 2`, `--misc.log-level debug`.
+- **Flags** are the key path in kebab-case: `--watcher.recursive`, `--watcher.max-depth 2`, `--misc.log-level debug`. On/off options take no value: `--watcher.recursive` turns one on, `--no-misc.check-for-updates` (or `--misc.check-for-updates=false`) turns one off.
 - **Environment variables** are `ROCAS_` plus the key path uppercased with `_`: `ROCAS_WATCHER_RECURSIVE=true`, `ROCAS_MISC_LOG_LEVEL=debug`. Lists are comma-separated: `ROCAS_WATCHER_WATCH_PATHS=/a,/b`.
 - `rocas --help` lists every option with its default and environment variable name.
 - `rocas --version` (or `-V`) prints the version.
@@ -162,6 +162,10 @@ Toggles launching rocas when you log in (run it again to turn it off), then keep
 ## Contributing
 
 Contributions are welcome! For major changes, please open an issue first to discuss what you have in mind. Bug fixes and improvements can go straight to a pull request.
+
+### Development
+
+The dev shell is [devenv](https://devenv.sh): run `devenv shell` (or let direnv load it), then `check` runs the same gate as CI: formatting, clippy, tests, docs, `cargo deny`, shellcheck and a spell check. The nix package and the NixOS and home-manager modules still come from `flake.nix`.
 
 ## Credits
 

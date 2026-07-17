@@ -3,8 +3,8 @@ resolver = "2"
 members = ["rocas", "watcher"]
 
 [workspace.lints.rust]
-future-incompatible = "warn"
-nonstandard-style = "deny"
+future_incompatible = "warn"
+nonstandard_style = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = 10 }

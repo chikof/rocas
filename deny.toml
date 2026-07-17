@@ -23,6 +23,8 @@ ignore = true
 
 [sources]
 unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/chikof/forgeconf.git"]
 
 [advisories]
 # self_update 0.44.0, the latest release, pins zip 6 and quick-xml 0.38. Drop

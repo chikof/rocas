@@ -52,6 +52,9 @@ fn all_defaults<T: forgeconf::FromNode>() -> T {
 }
 
 /// Rocas watches directories and moves files into folders based on rules.
+///
+/// Also: -b, --boot toggles starting rocas on boot, then keeps running;
+/// -V, --version prints the version.
 #[derive(forgeconf::Config)]
 #[config(file(path = config_path(), optional), env_prefix = "ROCAS_")]
 pub struct Config {
@@ -62,10 +65,6 @@ pub struct Config {
 
     #[config(default)]
     pub misc: MiscConfig,
-
-    /// Toggle starting rocas on boot, then keep running
-    #[config(default, short = 'b')]
-    pub boot: bool,
 }
 
 /// Configuration for the filesystem watcher.
@@ -249,10 +248,12 @@ impl RuleConfig {
 }
 
 impl Config {
-    /// Loads the configuration from the config file, the environment and the
-    /// command line, exiting on `--help` or on invalid input.
-    pub fn load() -> Self {
-        Self::loader().cli().load_or_exit()
+    /// Loads the configuration from the config file, the environment and
+    /// `args` (the full argv), exiting on `--help` or on invalid input.
+    pub fn load(args: Vec<std::ffi::OsString>) -> Self {
+        Self::loader()
+            .cli_args(args)
+            .load_or_exit()
     }
 
     /// Builds and prints the startup ASCII art banner with configuration

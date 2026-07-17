@@ -24,7 +24,7 @@ self_update = { version = "0.44.0", default-features = false, features = [
     "compression-flate2",
     "compression-zip-deflate",
 ] }
-forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "8e594ee68a615b0f1e22b4243ea696a89934557c" }
+forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "f425d98c7ff615802ae2d1b5ed8877d72dc80893" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.182"
