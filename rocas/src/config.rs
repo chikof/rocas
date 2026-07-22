@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use auto_launch::AutoLaunchBuilder;
 use forgeconf::Config as _;
-use self_update::cargo_crate_version;
 
 use crate::pattern::Pattern;
 use crate::{AppError, art, logger};
@@ -278,7 +277,7 @@ impl Config {
             "  {} director{} (v{})",
             watch_paths.len(),
             if watch_paths.len() == 1 { "y" } else { "ies" },
-            cargo_crate_version!()
+            env!("CARGO_PKG_VERSION")
         )));
         for path in watch_paths {
             msgs.push(info(&format!("    {path}")));
