@@ -9,11 +9,15 @@
 //! [2026-03-01T22:14:24Z INFO  rocas] message
 //! ```
 //!
+//! # Level
+//!
+//! Filtering uses [`log::max_level`], so [`log::set_max_level`] changes the
+//! verbosity of a running logger.
+//!
 //! # Colors
 //!
 //! ANSI colors are applied to the level tag when stderr is a terminal.
-//! File output is always plain text. On Windows, `SetConsoleMode` is called
-//! at init time to opt in to virtual terminal processing.
+//! File output is always plain text.
 //!
 //! # Rotation
 //!
@@ -26,9 +30,13 @@
 //! rocas.log    → rocas.log.1
 //! rocas.log    (new, empty)
 //! ```
+//!
+//! With `keep_files = 0` the active file is truncated instead.
 
+use std::ffi::OsString;
+use std::fmt;
 use std::fs::{File, OpenOptions, rename};
-use std::io::{BufWriter, Write};
+use std::io::{ErrorKind, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -43,6 +51,39 @@ pub enum LoggerInitError {
 }
 
 const RESET: &str = "\x1b[0m";
+
+/// A Unix timestamp that displays as `YYYY-MM-DDTHH:MM:SSZ` (UTC, ISO 8601)
+/// without any external crate and without allocating.
+struct Timestamp(u64);
+
+impl fmt::Display for Timestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let secs = self.0;
+        let sec = secs % 60;
+        let min = (secs / 60) % 60;
+        let hour = (secs / 3_600) % 24;
+        let days = secs / 86_400;
+
+        // Gregorian calendar calculation (algorithm by Howard Hinnant).
+        let shifted = days + 719_468;
+        let era = shifted / 146_097;
+        let doe = shifted - era * 146_097;
+        let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+        let year = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        let year = if month <= 2 { year + 1 } else { year };
+
+        write!(f, "{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
+    }
+}
+
+/// Formats a Unix timestamp as `YYYY-MM-DDTHH:MM:SSZ` (UTC, ISO 8601).
+pub fn format_timestamp(secs: u64) -> String {
+    Timestamp(secs).to_string()
+}
 
 /// Format a single log line the same way the logger writes to stderr —
 /// including ANSI color on the level tag when stderr is a tty.
@@ -70,54 +111,12 @@ fn level_color(level: log::Level) -> &'static str {
 
 /// Returns `true` when stderr is connected to a terminal.
 pub fn stderr_is_tty() -> bool {
-    #[cfg(unix)]
-    {
-        // SAFETY: isatty is always safe to call with a valid fd.
-        unsafe { libc::isatty(libc::STDERR_FILENO) != 0 }
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-
-        use windows_sys::Win32::System::Console::GetConsoleMode;
-        let handle = std::io::stderr().as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
-        let mut mode: u32 = 0;
-        // GetConsoleMode succeeds only when the handle is a real console,
-        // not a pipe or redirected file.
-        unsafe { GetConsoleMode(handle, &mut mode) != 0 }
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        false
-    }
-}
-
-/// On Windows 10+, enable virtual terminal processing so ANSI escape codes
-/// render in the console. No-op on other platforms.
-fn enable_ansi_on_windows() {
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-
-        use windows_sys::Win32::System::Console::{
-            ENABLE_VIRTUAL_TERMINAL_PROCESSING,
-            GetConsoleMode,
-            SetConsoleMode,
-        };
-        let handle = std::io::stderr().as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
-        let mut mode: u32 = 0;
-        unsafe {
-            if GetConsoleMode(handle, &mut mode) != 0 {
-                let _ = SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-            }
-        }
-    }
+    std::io::stderr().is_terminal()
 }
 
 /// Logger that writes to stderr (with optional ANSI colors) and an optional
 /// rotating log file (always plain text).
 pub struct Logger {
-    level: log::LevelFilter,
     /// Cached at init time — does not change while the process is running.
     use_color: bool,
     file: Option<Mutex<FileLogger>>,
@@ -126,7 +125,9 @@ pub struct Logger {
 impl Logger {
     /// Build and globally register the logger.
     ///
-    /// `log_path` — `None` disables file logging (stderr only).
+    /// `log_path` — `None` disables file logging (stderr only). `level` is
+    /// installed as the global maximum level; change it later with
+    /// [`log::set_max_level`].
     ///
     /// # Errors
     ///
@@ -139,19 +140,17 @@ impl Logger {
         max_size_mb: u64,
         keep_files: u32,
     ) -> Result<(), LoggerInitError> {
-        enable_ansi_on_windows();
-        let use_color = stderr_is_tty();
-
         let file = log_path
             .map(|path| {
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
-                FileLogger::new(path, max_size_mb * 1024 * 1024, keep_files).map(Mutex::new)
+                FileLogger::new(path, max_size_mb.saturating_mul(1024 * 1024), keep_files)
+                    .map(Mutex::new)
             })
             .transpose()?;
 
-        let logger = Box::new(Logger { level, use_color, file });
+        let logger = Box::new(Logger { use_color: stderr_is_tty(), file });
         log::set_boxed_logger(logger)?;
         log::set_max_level(level);
         Ok(())
@@ -160,7 +159,7 @@ impl Logger {
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= self.level
+        metadata.level() <= log::max_level()
     }
 
     fn log(&self, record: &log::Record) {
@@ -168,47 +167,44 @@ impl log::Log for Logger {
             return;
         }
 
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let ts = format_timestamp(secs);
-
+        let ts = Timestamp(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        );
         let level = record.level();
         let target = record.target();
         let args = record.args();
 
-        // Plain line written to the log file (no ANSI codes).
+        // Formatting happens before any lock, and each sink gets the whole
+        // line in a single write so concurrent lines never interleave.
         let plain = format!("[{ts} {level:<5} {target}] {args}\n");
 
-        // Stderr: color the level tag if we're on a tty.
-        if self.use_color {
+        // A closed or full stderr must never take the daemon down.
+        let _ = if self.use_color {
             let color = level_color(level);
-            eprintln!("[{ts} {color}{level:<5}{RESET} {target}] {args}");
+            let colored = format!("[{ts} {color}{level:<5}{RESET} {target}] {args}\n");
+            std::io::stderr().write_all(colored.as_bytes())
         } else {
-            eprint!("{plain}");
-        }
+            std::io::stderr().write_all(plain.as_bytes())
+        };
 
-        // Write plain text to file.
         if let Some(mutex) = &self.file
-            && let Ok(mut fl) = mutex.lock()
-            && let Err(e) = fl.write_line(&plain)
+            && let Ok(mut file) = mutex.lock()
+            && let Err(e) = file.write_line(plain.as_bytes())
         {
-            eprintln!("[rocas logger] failed to write to log file: {e}");
+            let _ = writeln!(std::io::stderr(), "[rocas logger] failed to write to log file: {e}");
         }
     }
 
-    fn flush(&self) {
-        if let Some(mutex) = &self.file
-            && let Ok(mut fl) = mutex.lock()
-        {
-            let _ = fl.writer.flush();
-        }
-    }
+    // The file is written unbuffered, one `write` per line: nothing is lost
+    // if the process aborts, and there is nothing to flush.
+    fn flush(&self) {}
 }
 
 struct FileLogger {
-    writer: BufWriter<File>,
+    file: File,
     path: PathBuf,
     current_size: u64,
     max_size_bytes: u64,
@@ -216,19 +212,21 @@ struct FileLogger {
 }
 
 impl FileLogger {
-    fn open(path: &Path) -> std::io::Result<(BufWriter<File>, u64)> {
+    fn open(path: &Path, truncate: bool) -> std::io::Result<(File, u64)> {
         let file = OpenOptions::new()
             .create(true)
-            .append(true)
+            .write(true)
+            .append(!truncate)
+            .truncate(truncate)
             .open(path)?;
         let size = file.metadata()?.len();
-        Ok((BufWriter::new(file), size))
+        Ok((file, size))
     }
 
     fn new(path: PathBuf, max_size_bytes: u64, keep_files: u32) -> std::io::Result<Self> {
-        let (writer, current_size) = Self::open(&path)?;
+        let (file, current_size) = Self::open(&path, false)?;
         Ok(Self {
-            writer,
+            file,
             path,
             current_size,
             max_size_bytes,
@@ -236,62 +234,149 @@ impl FileLogger {
         })
     }
 
+    /// `rocas.log` + 2 → `rocas.log.2`; appended to the full file name so a
+    /// log path without the `.log` extension rotates next to itself.
+    fn numbered(&self, index: u32) -> PathBuf {
+        let mut name = OsString::from(self.path.as_os_str());
+        name.push(format!(".{index}"));
+        PathBuf::from(name)
+    }
+
     fn rotate(&mut self) -> std::io::Result<()> {
-        self.writer.flush()?;
-
-        for i in (1..self.keep_files).rev() {
-            let from = self
-                .path
-                .with_extension(format!("log.{i}"));
-            let to = self
-                .path
-                .with_extension(format!("log.{}", i + 1));
-            if from.exists() {
-                let _ = rename(&from, &to);
-            }
-        }
-
         if self.keep_files > 0 {
-            let _ = rename(&self.path, self.path.with_extension("log.1"));
+            for i in (1..self.keep_files).rev() {
+                match rename(self.numbered(i), self.numbered(i + 1)) {
+                    Err(e) if e.kind() != ErrorKind::NotFound => return Err(e),
+                    _ => {},
+                }
+            }
+            rename(&self.path, self.numbered(1))?;
         }
 
-        let (writer, _) = Self::open(&self.path)?;
-        self.writer = writer;
-        self.current_size = 0;
+        let (file, size) = Self::open(&self.path, self.keep_files == 0)?;
+        self.file = file;
+        self.current_size = size;
         Ok(())
     }
 
-    fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+    fn write_line(&mut self, line: &[u8]) -> std::io::Result<()> {
         if self.max_size_bytes > 0 && self.current_size >= self.max_size_bytes {
             self.rotate()?;
         }
-        let bytes = line.as_bytes();
-        self.writer.write_all(bytes)?;
-        self.writer.flush()?;
-        self.current_size += bytes.len() as u64;
+        self.file.write_all(line)?;
+        self.current_size += line.len() as u64;
         Ok(())
     }
 }
 
-/// Formats a Unix timestamp as `YYYY-MM-DDTHH:MM:SSZ` (UTC, ISO 8601) without
-/// any external crate.
-pub fn format_timestamp(secs: u64) -> String {
-    let sec = secs % 60;
-    let min = (secs / 60) % 60;
-    let hour = (secs / 3_600) % 24;
-    let days = secs / 86_400;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // Gregorian calendar calculation (algorithm by Howard Hinnant).
-    let shifted = days + 719_468;
-    let era = shifted / 146_097;
-    let doe = shifted - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let year = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = if month <= 2 { year + 1 } else { year };
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rocas-logger-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir is creatable");
+        dir
+    }
 
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
+    fn read(path: &Path) -> String {
+        std::fs::read_to_string(path).unwrap_or_default()
+    }
+
+    #[test]
+    fn timestamp_formats_the_epoch() {
+        assert_eq!(format_timestamp(0), "1970-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn timestamp_formats_a_leap_day() {
+        assert_eq!(format_timestamp(1_709_210_096), "2024-02-29T12:34:56Z");
+    }
+
+    #[test]
+    fn rotation_keeps_n_files_and_drops_the_oldest() {
+        let dir = temp_dir("keep");
+        let path = dir.join("rocas.log");
+        let mut logger = FileLogger::new(path.clone(), 4, 2).expect("log file opens");
+
+        for line in ["aaaa\n", "bbbb\n", "cccc\n", "dddd\n"] {
+            logger
+                .write_line(line.as_bytes())
+                .expect("write succeeds");
+        }
+
+        assert_eq!(read(&path), "dddd\n");
+        assert_eq!(read(&dir.join("rocas.log.1")), "cccc\n");
+        assert_eq!(read(&dir.join("rocas.log.2")), "bbbb\n");
+        assert!(!dir.join("rocas.log.3").exists());
+    }
+
+    #[test]
+    fn rotation_without_a_log_extension_stays_next_to_the_file() {
+        let dir = temp_dir("noext");
+        let path = dir.join("rocas");
+        let mut logger = FileLogger::new(path.clone(), 4, 1).expect("log file opens");
+
+        logger
+            .write_line(b"aaaa\n")
+            .expect("write succeeds");
+        logger
+            .write_line(b"bbbb\n")
+            .expect("write succeeds");
+
+        assert_eq!(read(&path), "bbbb\n");
+        assert_eq!(read(&dir.join("rocas.1")), "aaaa\n");
+    }
+
+    #[test]
+    fn keeping_zero_files_truncates() {
+        let dir = temp_dir("zero");
+        let path = dir.join("rocas.log");
+        let mut logger = FileLogger::new(path.clone(), 4, 0).expect("log file opens");
+
+        logger
+            .write_line(b"aaaa\n")
+            .expect("write succeeds");
+        logger
+            .write_line(b"bbbb\n")
+            .expect("write succeeds");
+
+        assert_eq!(read(&path), "bbbb\n");
+        assert!(!dir.join("rocas.log.1").exists());
+    }
+
+    #[test]
+    fn zero_max_size_never_rotates() {
+        let dir = temp_dir("norot");
+        let path = dir.join("rocas.log");
+        let mut logger = FileLogger::new(path.clone(), 0, 3).expect("log file opens");
+
+        for _ in 0..3 {
+            logger
+                .write_line(b"aaaa\n")
+                .expect("write succeeds");
+        }
+
+        assert_eq!(read(&path), "aaaa\naaaa\naaaa\n");
+        assert!(!dir.join("rocas.log.1").exists());
+    }
+
+    #[test]
+    fn reopening_appends_and_counts_existing_bytes() {
+        let dir = temp_dir("reopen");
+        let path = dir.join("rocas.log");
+        std::fs::write(&path, "old\n").expect("seed file is writable");
+        let mut logger = FileLogger::new(path.clone(), 8, 1).expect("log file opens");
+
+        logger
+            .write_line(b"aaaa\n")
+            .expect("write succeeds");
+        logger
+            .write_line(b"bbbb\n")
+            .expect("write succeeds");
+
+        assert_eq!(read(&dir.join("rocas.log.1")), "old\naaaa\n");
+        assert_eq!(read(&path), "bbbb\n");
+    }
 }
