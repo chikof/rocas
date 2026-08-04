@@ -28,6 +28,9 @@ fn strip_ansi_width(s: &str) -> usize {
 /// Everything is written to **stderr** so it interleaves correctly with the
 /// logger output (which also goes to stderr).
 pub fn print_banner_with_messages(messages: &[&str]) {
+    use std::fmt::Write as _;
+    use std::io::Write as _;
+
     let art_lines: Vec<&str> = ROCAS_ART.split('\n').collect();
 
     // Measure the visual width of the widest art line (should be 64).
@@ -39,19 +42,20 @@ pub fn print_banner_with_messages(messages: &[&str]) {
 
     let gap = "  ";
 
-    let n = art_lines.len().max(messages.len());
-    for i in 0..n {
+    let mut out = String::with_capacity(ROCAS_ART.len() + messages.len() * 96);
+    for i in 0..art_lines.len().max(messages.len()) {
         let art_line = art_lines.get(i).copied().unwrap_or("");
-        let visible_w = strip_ansi_width(art_line);
-        let padding = " ".repeat(art_width.saturating_sub(visible_w));
+        let padding = art_width.saturating_sub(strip_ansi_width(art_line));
 
         if let Some(msg) = messages.get(i) {
             // Art line + padding to align + gap + log message.
-            eprintln!("{art_line}{padding}{gap}{msg}");
+            let _ = writeln!(out, "{art_line}{:padding$}{gap}{msg}", "");
         } else {
-            eprintln!("{art_line}");
+            let _ = writeln!(out, "{art_line}");
         }
     }
+    // One write, and a closed stderr must not take the daemon down.
+    let _ = std::io::stderr().write_all(out.as_bytes());
 }
 
 pub const ROCAS_ART: &str = r"[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;7;3;1m [0m[38;2;7;3;1m [0m[38;2;7;3;1m [0m[38;2;7;3;1m [0m[38;2;8;4;1m [0m[38;2;11;5;2m [0m[38;2;11;5;2m [0m[38;2;11;5;2m [0m[38;2;11;5;2m [0m[38;2;5;2;0m [0m[38;2;3;1;0m [0m[38;2;3;1;0m [0m[38;2;3;1;0m [0m[38;2;3;1;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m[38;2;0;0;0m [0m
