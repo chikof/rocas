@@ -30,7 +30,8 @@ self_update = { version = "0.44.0", optional = true, default-features = false, f
     "compression-flate2",
     "compression-zip-deflate",
 ] }
-forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "9d9c202c13c58c67217fc922f1074f3ee946ecc7" }
+forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "c529e1a869073b588240b03d1301c0305d01e759", features = ["watch"] }
+notify = "8.2.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.182"
@@ -38,6 +39,3 @@ libc = "0.2.182"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 
-[dependencies.watcher]
-version = "0.1.0"
-path = "../watcher"

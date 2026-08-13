@@ -283,21 +283,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam-channel"
-version = "0.5.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-utils"
-version = "0.8.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
-
-[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -543,7 +528,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "forgeconf"
 version = "0.5.0"
-source = "git+https://github.com/chikof/forgeconf.git?rev=9d9c202c13c58c67217fc922f1074f3ee946ecc7#9d9c202c13c58c67217fc922f1074f3ee946ecc7"
+source = "git+https://github.com/chikof/forgeconf.git?rev=c529e1a869073b588240b03d1301c0305d01e759#c529e1a869073b588240b03d1301c0305d01e759"
 dependencies = [
  "forgeconf_macros",
 ]
@@ -551,7 +536,7 @@ dependencies = [
 [[package]]
 name = "forgeconf_macros"
 version = "0.5.0"
-source = "git+https://github.com/chikof/forgeconf.git?rev=9d9c202c13c58c67217fc922f1074f3ee946ecc7#9d9c202c13c58c67217fc922f1074f3ee946ecc7"
+source = "git+https://github.com/chikof/forgeconf.git?rev=c529e1a869073b588240b03d1301c0305d01e759#c529e1a869073b588240b03d1301c0305d01e759"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1659,9 +1644,9 @@ dependencies = [
  "forgeconf",
  "libc",
  "log",
+ "notify",
  "self_update",
  "thiserror",
- "watcher",
  "windows-sys 0.61.2",
  "winres",
 ]
@@ -2449,16 +2434,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b1f9c3798725016c6ee5f2f57869ec0831e8bbc0ab0310a86e787e97f41389e"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "watcher"
-version = "0.1.0"
-dependencies = [
- "crossbeam-channel",
- "log",
- "notify",
- "rustc-hash",
 ]
 
 [[package]]
