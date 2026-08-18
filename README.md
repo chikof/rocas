@@ -1,3 +1,5 @@
+
+
 <div align="center">
 <picture>
     <img alt="rocas_image" src="https://i.chiko.dev/u/rocas.png" width="300">
@@ -20,7 +22,7 @@
 
 ### Standalone
 
-Download the appropriate binary for your OS from the [Releases](https://github.com/chikof/rocas/releases) page, extract it, and run the executable.
+Download the appropriate binary for your OS from the [Releases](https://github.com/chikof/rocas/releases) page, extract it, and run `rocas` on Linux/macOS or `rocas.exe` on Windows.
 
 ### NixOS
 
