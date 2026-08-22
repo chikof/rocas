@@ -31,10 +31,15 @@ let
         watch_path = cfg.watcher.watchPath;
         watch_paths = cfg.watcher.watchPaths;
         recursive = cfg.watcher.recursive;
-        interval_millis = cfg.watcher.intervalMillis;
         max_depth = cfg.watcher.maxDepth;
+        poll = cfg.watcher.poll;
+        interval_millis = cfg.watcher.intervalMillis;
         debounce_ms = cfg.watcher.debounceMs;
         rename_timeout_ms = cfg.watcher.renameTimeoutMs;
+        settle_ms = cfg.watcher.settleMs;
+        max_wait_secs = cfg.watcher.maxWaitSecs;
+        ignore = cfg.watcher.ignore;
+        scan_on_start = cfg.watcher.scanOnStart;
       };
       misc = {
         check_for_updates = cfg.misc.checkForUpdates;
@@ -43,6 +48,8 @@ let
         log_file = cfg.misc.logFile;
         log_max_size_mb = cfg.misc.logMaxSizeMb;
         log_keep_files = cfg.misc.logKeepFiles;
+        on_conflict = cfg.misc.onConflict;
+        reload = cfg.misc.reload;
       };
       rules = map (r: {
         patterns = r.patterns;
@@ -72,21 +79,9 @@ in
 
     watcher = {
       watchPath = lib.mkOption {
-        type = lib.types.str;
-        default = config.home.homeDirectory + "/Downloads";
-        description = "Directory to watch.";
-      };
-      recursive = lib.mkOption {
-        type = lib.types.bool;
-        default = true;
-      };
-      intervalMillis = lib.mkOption {
-        type = lib.types.int;
-        default = 1000;
-      };
-      maxDepth = lib.mkOption {
-        type = lib.types.nullOr lib.types.int;
+        type = lib.types.nullOr lib.types.str;
         default = null;
+        description = "Directory to watch. null watches your Downloads directory.";
       };
       watchPaths = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -96,6 +91,29 @@ in
           takes precedence over watchPath. All paths share the same
           recursive, maxDepth, and timing settings.
         '';
+      };
+      recursive = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Watch subdirectories recursively.";
+      };
+      maxDepth = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Maximum recursion depth (null = unlimited).";
+      };
+      poll = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Poll for changes instead of using OS notifications. Turn this on
+          for network drives, where the OS does not report changes.
+        '';
+      };
+      intervalMillis = lib.mkOption {
+        type = lib.types.int;
+        default = 1000;
+        description = "Polling interval in milliseconds. Only used when poll is true.";
       };
       debounceMs = lib.mkOption {
         type = lib.types.int;
@@ -114,12 +132,47 @@ in
           treating the "From" as a plain delete.
         '';
       };
+      settleMs = lib.mkOption {
+        type = lib.types.int;
+        default = 1000;
+        description = ''
+          Move a file once its size and modification time have been
+          unchanged for this long (ms).
+        '';
+      };
+      maxWaitSecs = lib.mkOption {
+        type = lib.types.int;
+        default = 300;
+        description = ''
+          Move a file anyway after waiting this long (s) for it to settle.
+          A warning is logged when this limit is hit.
+        '';
+      };
+      ignore = lib.mkOption {
+        type = lib.types.nullOr (lib.types.listOf lib.types.str);
+        default = null;
+        example = [
+          "*.part"
+          "*.crdownload"
+        ];
+        description = ''
+          Filename globs that are never moved. null keeps rocas's built-in
+          list (`*.part`, `*.crdownload`, `*.download`, `*.partial`,
+          `*.tmp`, `*.opdownload`, `.~lock.*`); a list replaces it.
+        '';
+      };
+      scanOnStart = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Organize files already present in the watched directories at startup.";
+      };
     };
 
     misc = {
       checkForUpdates = lib.mkOption {
         type = lib.types.bool;
         default = true;
+        description = "No-op in Nix-managed installs — update via your flake instead.";
       };
       autoUpdate = lib.mkOption {
         type = lib.types.bool;
@@ -135,12 +188,14 @@ in
           "error"
         ];
         default = "info";
+        description = "Log verbosity.";
       };
       logFile = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = ''
-          Path to the log file. null disables file logging (stderr only).
+          Path to the log file. null uses rocas's default,
+          ~/.config/rocas/rocas.log on Linux.
           Example: "${config.home.homeDirectory}/.local/share/rocas/rocas.log"
         '';
       };
@@ -153,6 +208,24 @@ in
         type = lib.types.int;
         default = 3;
         description = "Number of rotated log files to keep alongside the active log.";
+      };
+      onConflict = lib.mkOption {
+        type = lib.types.enum [
+          "rename"
+          "skip"
+          "overwrite"
+        ];
+        default = "rename";
+        description = ''
+          What to do when the destination already has a file with that
+          name: `rename` keeps both ("name (1).ext"), `skip` leaves the
+          incoming file where it is, `overwrite` replaces the existing file.
+        '';
+      };
+      reload = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Reload rocas.toml when it changes.";
       };
     };
 
