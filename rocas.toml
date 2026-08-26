@@ -1,5 +1,9 @@
 [watcher]
 watch_path = "/home/chiko/Downloads"
+settle_ms = 1000
+
+[misc]
+on_conflict = "rename"
 
 [[rules]]
 patterns = ["*.pdf", "*.docx", "*.txt"]
