@@ -44,9 +44,9 @@ impl Sandbox {
         self.root.join("home/rocas/rocas.toml")
     }
 
-    /// Writes rocas.toml: the inbox is watched, `rules` are `(pattern,
+    /// The text of rocas.toml: the inbox is watched, `rules` are `(pattern,
     /// destination)` pairs, `watcher` is extra `[watcher]` content.
-    fn configure(&self, watcher: &str, rules: &[(&str, &Path)]) {
+    fn config_text(&self, watcher: &str, rules: &[(&str, &Path)]) -> String {
         // TOML literal strings keep backslashes in Windows paths intact.
         let mut toml = format!(
             "[watcher]\nwatch_paths = ['{}']\nsettle_ms = {SETTLE_MS}\n{watcher}\n",
@@ -64,9 +64,23 @@ impl Sandbox {
             "[misc]\ncheck_for_updates = false\nlog_file = '{}'\n",
             self.log().display()
         );
+        toml
+    }
+
+    /// Writes rocas.toml in place, as `echo > rocas.toml` would.
+    fn configure(&self, watcher: &str, rules: &[(&str, &Path)]) {
         let path = self.config_file();
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, toml).unwrap();
+        fs::write(path, self.config_text(watcher, rules)).unwrap();
+    }
+
+    /// Replaces rocas.toml the way editors save: write a temporary file, then
+    /// rename it over the config.
+    fn replace_config(&self, watcher: &str, rules: &[(&str, &Path)]) {
+        let path = self.config_file();
+        let tmp = path.with_extension("toml.tmp");
+        fs::write(&tmp, self.config_text(watcher, rules)).unwrap();
+        fs::rename(tmp, path).unwrap();
     }
 
     fn start(&self) -> Daemon {
@@ -311,4 +325,21 @@ fn a_broken_config_edit_keeps_the_previous_rules() {
     fs::write(sb.inbox().join("a.pdf"), "a").unwrap();
 
     wait_until("a.pdf in docs", || sb.docs().join("a.pdf").exists());
+}
+
+#[test]
+fn deleting_and_recreating_the_config_reloads_it() {
+    let sb = Sandbox::new();
+    let texts = sb.root.join("texts");
+    sb.configure("", &[("*.pdf", &sb.docs())]);
+    let _d = sb.start();
+
+    fs::remove_file(sb.config_file()).unwrap();
+    sb.wait_for_log("Config reload");
+    sb.replace_config("", &[("*.pdf", &sb.docs()), ("*.txt", &texts)]);
+    sb.wait_for_log("Config reloaded: 2 rule(s)");
+    fs::write(sb.inbox().join("n.txt"), "note").unwrap();
+
+    wait_until("n.txt in texts", || texts.join("n.txt").exists());
+    assert_eq!(fs::read_to_string(texts.join("n.txt")).unwrap(), "note");
 }

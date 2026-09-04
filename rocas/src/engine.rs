@@ -2,32 +2,26 @@
 //!
 //! One thread owns everything. [`Tracker`] is a pure state machine: it is fed
 //! events and the current time, and hands back [`Job`]s once a file has stopped
-//! changing. [`run`] wires it to notify, the config watcher and the mover, and
-//! sleeps in `recv`/`recv_timeout` until the next deadline, so an idle daemon
-//! never wakes.
+//! changing. [`run`] wires it to notify and the mover, and reloads the config
+//! when notify reports a change to its file. It sleeps in
+//! `recv`/`recv_timeout` until the next deadline, so an idle daemon never
+//! wakes.
 
 use std::cell::LazyCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant, SystemTime};
-use std::{fs, io, thread};
+use std::{fs, io};
 
-use forgeconf::ConfigError;
 use notify::event::{ModifyKind, RenameMode};
 use notify::{Event, EventKind};
 
 use crate::AppError;
-use crate::config::Config;
+use crate::config::{self, Config};
 use crate::mover::{self, Moved};
 use crate::pattern::Pattern;
 use crate::watch::FsWatcher;
-
-/// Everything the event loop waits on.
-pub enum Msg {
-    Fs(notify::Result<Event>),
-    Reload(Result<Config, ConfigError>),
-}
 
 /// What the tracker needs to know about a path on disk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -413,18 +407,61 @@ struct Engine {
     tracker: Tracker,
     fs: FsWatcher,
     watched: Vec<(PathBuf, bool)>,
-    tx: Sender<Msg>,
-    reload: bool,
+    tx: Sender<notify::Result<Event>>,
+    loader: forgeconf::Loader<Config>,
+    config_file: ConfigFile,
+    /// Whether the config directory carries a watch of its own, as opposed to
+    /// none or one that a watch root provides.
+    config_watched: bool,
+    /// When the pending config reload is due; each config event pushes it out.
+    reload_at: Option<Instant>,
 }
 
-fn new_fs(config: &Config, tx: &Sender<Msg>) -> notify::Result<FsWatcher> {
+/// Floor for the reload debounce: editors save by writing a temporary file
+/// and renaming it over the config, which takes several events.
+const MIN_RELOAD_DEBOUNCE: Duration = Duration::from_millis(100);
+
+/// The config file as the watcher reports it.
+struct ConfigFile {
+    dir: PathBuf,
+    /// Spellings of the file's path: some backends report canonical paths.
+    paths: Vec<PathBuf>,
+}
+
+impl ConfigFile {
+    fn new(path: PathBuf) -> Self {
+        let dir = path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .to_path_buf();
+        let mut paths = Vec::with_capacity(2);
+        if let (Some(name), Ok(canon)) = (path.file_name(), fs::canonicalize(&dir)) {
+            paths.push(canon.join(name));
+        }
+        paths.push(path);
+        paths.dedup();
+        Self { dir, paths }
+    }
+
+    /// Whether `event` created, changed, renamed or removed the file. Reading
+    /// it produces access events, which must not count.
+    fn concerns(&self, event: &Event) -> bool {
+        matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_))
+            && event
+                .paths
+                .iter()
+                .any(|p| self.paths.contains(p))
+    }
+}
+
+fn new_fs(config: &Config, tx: &Sender<notify::Result<Event>>) -> notify::Result<FsWatcher> {
     let tx = tx.clone();
     let w = &config.watcher;
     FsWatcher::new(
         w.poll
             .then(|| Duration::from_millis(w.interval_millis)),
         move |res| {
-            let _ = tx.send(Msg::Fs(res));
+            let _ = tx.send(res);
         },
     )
 }
@@ -476,17 +513,72 @@ impl Engine {
         }
     }
 
-    fn on_msg(&mut self, msg: Msg) {
-        match msg {
-            Msg::Fs(Ok(event)) => self
-                .tracker
-                .on_event(event, Instant::now(), &FsProbe),
-            Msg::Fs(Err(e)) => error!("Watcher error: {e}"),
-            Msg::Reload(_) if !self.reload => {},
-            Msg::Reload(Ok(config)) => self.apply(config),
-            Msg::Reload(Err(e)) => {
-                error!("Config reload failed, keeping the previous configuration:\n{e}");
+    fn on_fs(&mut self, res: notify::Result<Event>) {
+        let event = match res {
+            Ok(event) => event,
+            Err(e) => {
+                error!("Watcher error: {e}");
+                return;
             },
+        };
+        let now = Instant::now();
+        if self.config.misc.reload && self.config_file.concerns(&event) {
+            let window = Duration::from_millis(self.config.watcher.debounce_ms);
+            self.reload_at = Some(now + window.max(MIN_RELOAD_DEBOUNCE));
+        }
+        self.tracker
+            .on_event(event, now, &FsProbe);
+    }
+
+    /// Watches the config file's directory for reload events only. It is
+    /// not a root unless the config names it as one, and then that watch
+    /// already covers it.
+    fn watch_config_dir(&mut self) {
+        let dir = &self.config_file.dir;
+        let reload = self.config.misc.reload;
+        let covered = roots(&self.config)
+            .iter()
+            .any(|(p, _)| p == dir);
+        if reload && !covered && !self.config_watched {
+            match self.fs.watch(dir, false) {
+                Ok(()) => self.config_watched = true,
+                Err(e) => {
+                    debug!("Config reload unavailable: cannot watch '{}': {e}", dir.display());
+                },
+            }
+        } else if self.config_watched && (!reload || covered) {
+            if !reload && let Err(e) = self.fs.unwatch(dir) {
+                debug!("Unwatching '{}': {e}", dir.display());
+            }
+            self.config_watched = false;
+        }
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        self.tracker
+            .next_deadline()
+            .into_iter()
+            .chain(self.reload_at)
+            .min()
+    }
+
+    /// Runs what has come due: the config reload, then the settled files.
+    fn tick(&mut self) {
+        let now = Instant::now();
+        if self
+            .reload_at
+            .is_some_and(|due| due <= now)
+        {
+            self.reload_at = None;
+            match self.loader.load() {
+                Ok(config) => self.apply(config),
+                Err(e) => {
+                    error!("Config reload failed, keeping the previous configuration:\n{e}");
+                },
+            }
+        }
+        for job in self.tracker.advance(now, &FsProbe) {
+            self.execute(&job);
         }
     }
 
@@ -501,7 +593,9 @@ impl Engine {
 
         self.tracker
             .set_plan(Plan::from_config(&new, &FsProbe));
-        self.reload = new.misc.reload;
+        if !new.misc.reload {
+            self.reload_at = None;
+        }
         let rules = new.rules.len();
         self.config = new;
 
@@ -512,6 +606,7 @@ impl Engine {
                 Ok(fs) => {
                     self.fs = fs;
                     self.watched.clear();
+                    self.config_watched = false;
                 },
                 Err(e) => error!("Cannot switch the watch backend: {e}"),
             }
@@ -538,6 +633,7 @@ impl Engine {
                 Err(e) => error!("Cannot watch '{}': {e}", path.display()),
             }
         }
+        self.watch_config_dir();
         info!(
             "Config reloaded: {rules} rule(s), {} director{} watched (+{added} -{removed})",
             self.watched.len(),
@@ -563,26 +659,29 @@ impl Engine {
 
 /// Runs the daemon until the process is stopped.
 ///
-/// `reload` delivers freshly loaded configurations when the config file
-/// changes; `None` disables hot reload.
+/// `loader` re-reads the configuration whenever the config file changes;
+/// `misc.reload = false` turns that off.
 ///
 /// # Errors
 ///
 /// Fails if a watch directory cannot be watched at startup.
-pub fn run(config: Config, reload: Option<forgeconf::Watcher<Config>>) -> Result<(), AppError> {
+pub fn run(config: Config, loader: forgeconf::Loader<Config>) -> Result<(), AppError> {
     let (tx, rx) = mpsc::channel();
     let fs = new_fs(&config, &tx)?;
     let tracker = Tracker::new(Plan::from_config(&config, &FsProbe));
-    let reload_enabled = reload.is_some();
     let mut engine = Engine {
         config,
         tracker,
         fs,
         watched: Vec::new(),
-        tx: tx.clone(),
-        reload: reload_enabled,
+        tx,
+        loader,
+        config_file: ConfigFile::new(config::config_path()),
+        config_watched: false,
+        reload_at: None,
     };
 
+    engine.watch_config_dir();
     for (path, recursive) in roots(&engine.config) {
         engine.watch_root(path, recursive)?;
     }
@@ -595,43 +694,24 @@ pub fn run(config: Config, reload: Option<forgeconf::Watcher<Config>>) -> Result
         .config
         .print_startup_banner(&paths);
 
-    if let Some(watcher) = reload {
-        thread::Builder::new()
-            .name("config-reload".into())
-            .spawn(move || {
-                while let Some(result) = watcher.recv() {
-                    if tx.send(Msg::Reload(result)).is_err() {
-                        break;
-                    }
-                }
-            })?;
-    } else {
-        drop(tx);
-    }
-
     loop {
-        let msg = match engine.tracker.next_deadline() {
+        let msg = match engine.next_deadline() {
             None => rx
                 .recv()
                 .map_err(|_| RecvTimeoutError::Disconnected),
             Some(deadline) => rx.recv_timeout(deadline.saturating_duration_since(Instant::now())),
         };
         match msg {
-            Ok(msg) => {
-                engine.on_msg(msg);
-                while let Ok(msg) = rx.try_recv() {
-                    engine.on_msg(msg);
+            Ok(res) => {
+                engine.on_fs(res);
+                while let Ok(res) = rx.try_recv() {
+                    engine.on_fs(res);
                 }
             },
             Err(RecvTimeoutError::Timeout) => {},
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
         }
-        for job in engine
-            .tracker
-            .advance(Instant::now(), &FsProbe)
-        {
-            engine.execute(&job);
-        }
+        engine.tick();
     }
 }
 

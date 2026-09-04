@@ -1,7 +1,5 @@
 #![windows_subsystem = "windows"]
 
-use std::time::Duration;
-
 mod args;
 mod art;
 mod config;
@@ -14,9 +12,6 @@ mod watch;
 
 #[macro_use]
 extern crate log;
-
-/// How often the config files are checked for changes.
-const RELOAD_INTERVAL: Duration = Duration::from_millis(500);
 
 /// All errors that can occur in the rocas binary.
 #[derive(Debug, thiserror::Error)]
@@ -53,7 +48,8 @@ fn main() -> Result<(), AppError> {
         return Ok(());
     }
 
-    let config = config::loader(args.rest.clone()).load_or_exit();
+    let loader = config::loader(args.rest);
+    let config = loader.load_or_exit();
 
     if args.boot {
         config::startup_toggle()?;
@@ -70,9 +66,5 @@ fn main() -> Result<(), AppError> {
         update::check(config.misc.auto_update)?;
     }
 
-    let reload = config
-        .misc
-        .reload
-        .then(|| config::loader(args.rest).watch(RELOAD_INTERVAL));
-    engine::run(config, reload)
+    engine::run(config, loader)
 }
