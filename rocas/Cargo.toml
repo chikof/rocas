@@ -22,7 +22,7 @@ self_update = { version = "0.44.0", default-features = false, features = [
     "compression-flate2",
     "compression-zip-deflate",
 ] }
-clap = { version = "=4.6.1", features = ["derive"] }
+clap = { version = "=4.6.6", features = ["derive"] }
 clap_derive = "4.0.0-rc.1"
 
 [target.'cfg(unix)'.dependencies]
