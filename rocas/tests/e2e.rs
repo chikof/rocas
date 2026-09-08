@@ -13,6 +13,8 @@ const SETTLE_MS: u64 = 200;
 
 struct Sandbox {
     root: PathBuf,
+    /// The watched directory; the inbox unless a test points it elsewhere.
+    watch: PathBuf,
 }
 
 impl Sandbox {
@@ -25,7 +27,11 @@ impl Sandbox {
         ));
         fs::create_dir_all(root.join("home")).unwrap();
         fs::create_dir_all(root.join("inbox")).unwrap();
-        Self { root }
+        Self { watch: root.join("inbox"), root }
+    }
+
+    fn home(&self) -> PathBuf {
+        self.root.join("home")
     }
 
     fn inbox(&self) -> PathBuf {
@@ -50,7 +56,7 @@ impl Sandbox {
         // TOML literal strings keep backslashes in Windows paths intact.
         let mut toml = format!(
             "[watcher]\nwatch_paths = ['{}']\nsettle_ms = {SETTLE_MS}\n{watcher}\n",
-            self.inbox().display()
+            self.watch.display()
         );
         for (pattern, dest) in rules {
             let _ = write!(
@@ -342,4 +348,34 @@ fn deleting_and_recreating_the_config_reloads_it() {
 
     wait_until("n.txt in texts", || texts.join("n.txt").exists());
     assert_eq!(fs::read_to_string(texts.join("n.txt")).unwrap(), "note");
+}
+
+#[test]
+fn the_config_file_is_never_organised_but_its_neighbours_are() {
+    let mut sb = Sandbox::new();
+    sb.watch = sb.home();
+    let texts = sb.root.join("texts");
+    sb.configure("recursive = true", &[("*.toml", &sb.docs())]);
+    let _d = sb.start();
+
+    sb.configure("recursive = true", &[("*.toml", &sb.docs()), ("*.txt", &texts)]);
+    sb.wait_for_log("Config reloaded");
+    fs::write(sb.home().join("other.toml"), "other").unwrap();
+
+    wait_until("other.toml in docs", || sb.docs().join("other.toml").exists());
+    thread::sleep(Duration::from_millis(3 * SETTLE_MS));
+    assert_eq!(names(&sb.docs()), ["other.toml"]);
+    assert!(
+        fs::read_to_string(sb.config_file())
+            .unwrap()
+            .contains("*.txt")
+    );
+    assert_eq!(
+        sb.log_text()
+            .matches("Config reloaded")
+            .count(),
+        1,
+        "{}",
+        sb.log_text()
+    );
 }

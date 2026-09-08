@@ -528,7 +528,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "forgeconf"
 version = "0.5.0"
-source = "git+https://github.com/chikof/forgeconf.git?rev=2a5d64ca20a658e0551f72c223fe8b67cb9af5de#2a5d64ca20a658e0551f72c223fe8b67cb9af5de"
+source = "git+https://github.com/chikof/forgeconf.git?rev=e36122e390ee82ff4efb92a05d53a16ee42d4b26#e36122e390ee82ff4efb92a05d53a16ee42d4b26"
 dependencies = [
  "forgeconf_macros",
 ]
@@ -536,7 +536,7 @@ dependencies = [
 [[package]]
 name = "forgeconf_macros"
 version = "0.5.0"
-source = "git+https://github.com/chikof/forgeconf.git?rev=2a5d64ca20a658e0551f72c223fe8b67cb9af5de#2a5d64ca20a658e0551f72c223fe8b67cb9af5de"
+source = "git+https://github.com/chikof/forgeconf.git?rev=e36122e390ee82ff4efb92a05d53a16ee42d4b26#e36122e390ee82ff4efb92a05d53a16ee42d4b26"
 dependencies = [
  "proc-macro2",
  "quote",

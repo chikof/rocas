@@ -177,6 +177,8 @@ impl Candidate {
 
 pub struct Tracker {
     plan: Plan,
+    /// Spellings of rocas's own config file, which is never organised.
+    own: Vec<PathBuf>,
     /// A rename's source, waiting for its destination event.
     pending_from: Option<(PathBuf, Instant)>,
     debounce: HashMap<PathBuf, Pending>,
@@ -187,10 +189,17 @@ impl Tracker {
     pub fn new(plan: Plan) -> Self {
         Self {
             plan,
+            own: Vec::new(),
             pending_from: None,
             debounce: HashMap::new(),
             candidates: HashMap::new(),
         }
+    }
+
+    /// Excludes rocas's own config file, given by every spelling the watcher
+    /// may report it under, from ever being tracked or moved.
+    pub fn protect(&mut self, own: Vec<PathBuf>) {
+        self.own = own;
     }
 
     /// Swaps in a new plan. Tracked files stay; the ones the new plan no
@@ -199,14 +208,30 @@ impl Tracker {
         self.plan = plan;
     }
 
+    /// Whether `path` is the config file, however it is spelled: through a
+    /// symlinked directory, or after the file itself was deleted.
+    fn is_own(&self, path: &Path, probe: &impl Probe) -> bool {
+        if self.own.iter().any(|o| o == path) {
+            return true;
+        }
+        let (Some(name), Some(dir)) = (path.file_name(), path.parent()) else { return false };
+        self.own
+            .iter()
+            .any(|o| o.file_name() == Some(name))
+            && probe
+                .canonicalize(dir)
+                .is_some_and(|dir| self.own.contains(&dir.join(name)))
+    }
+
     /// The rule that `path` would be moved by, if any.
-    fn resolve(&self, path: &Path) -> Option<usize> {
+    fn resolve(&self, path: &Path, probe: &impl Probe) -> Option<usize> {
         let name = path.file_name()?.to_str()?;
         if !self
             .plan
             .roots
             .iter()
             .any(|r| r.admits(path))
+            || self.is_own(path, probe)
         {
             return None;
         }
@@ -250,7 +275,7 @@ impl Tracker {
                 | ModifyKind::Name(RenameMode::Any | RenameMode::Other),
             ) => {
                 for path in paths {
-                    self.touch(path, now);
+                    self.touch(path, now, probe);
                 }
             },
             EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
@@ -268,7 +293,7 @@ impl Tracker {
                     if paired {
                         self.admit(path, now, probe);
                     } else {
-                        self.touch(path, now);
+                        self.touch(path, now, probe);
                     }
                 }
             },
@@ -289,12 +314,12 @@ impl Tracker {
     }
 
     /// Notes activity on `path`, collapsing bursts into one later look.
-    fn touch(&mut self, path: PathBuf, now: Instant) {
+    fn touch(&mut self, path: PathBuf, now: Instant, probe: &impl Probe) {
         if let Some(pending) = self.debounce.get_mut(&path) {
             pending.last_event = now;
             return;
         }
-        if !self.candidates.contains_key(&path) && self.resolve(&path).is_none() {
+        if !self.candidates.contains_key(&path) && self.resolve(&path, probe).is_none() {
             return;
         }
         let deadline = now + self.plan.debounce;
@@ -328,7 +353,7 @@ impl Tracker {
                 c.stat = stat;
                 c.last_change = changed;
             }
-        } else if self.resolve(&path).is_some() {
+        } else if self.resolve(&path, probe).is_some() {
             self.candidates.insert(
                 path,
                 Candidate {
@@ -374,7 +399,7 @@ impl Tracker {
                     self.plan.max_wait.as_secs()
                 );
             }
-            let Some(idx) = self.resolve(&path) else { continue };
+            let Some(idx) = self.resolve(&path, probe) else { continue };
             let rule = &mut self.plan.rules[idx];
             if rule.dest_canon.is_none() {
                 // The destination may only exist since the last move.
@@ -681,6 +706,9 @@ pub fn run(config: Config, loader: forgeconf::Loader<Config>) -> Result<(), AppE
         reload_at: None,
     };
 
+    engine
+        .tracker
+        .protect(engine.config_file.paths.clone());
     engine.watch_config_dir();
     for (path, recursive) in roots(&engine.config) {
         engine.watch_root(path, recursive)?;
@@ -1156,6 +1184,42 @@ mod tests {
         probe.put("/real/docs/a.pdf", 1, 1);
 
         tracker.on_event(created("/real/docs/a.pdf"), Instant::now(), &probe);
+
+        assert_eq!(tracker.next_deadline(), None);
+    }
+
+    #[test]
+    fn the_own_config_file_is_never_tracked_but_its_neighbours_are() {
+        let mut r = rig(&[(&["*.toml"], "/docs")]);
+        r.tracker
+            .protect(vec!["/in/rocas.toml".into()]);
+        r.probe.put("/in/rocas.toml", 1, 1);
+        r.probe.put("/in/other.toml", 1, 1);
+
+        r.event(0, created("/in/rocas.toml"));
+        assert_eq!(r.deadline(), None);
+        r.event(0, rename(RenameMode::Both, &["/in/rocas.toml.tmp", "/in/rocas.toml"]));
+        assert_eq!(r.deadline(), None);
+
+        r.event(0, created("/in/other.toml"));
+        r.advance(50);
+        assert_eq!(r.advance(1000), [job("/in/other.toml", "/docs")]);
+    }
+
+    #[test]
+    fn the_own_config_file_is_recognised_through_a_symlinked_spelling() {
+        let probe = Fake::default();
+        let mut plan = plan(&probe, &[(&["*.toml"], "/docs")], true, None);
+        plan.roots.push(Root {
+            path: "/link".into(),
+            canon: None,
+            max_depth: None,
+        });
+        let mut tracker = Tracker::new(plan);
+        tracker.protect(vec!["/real/cfg/rocas.toml".into()]);
+        probe.put("/link/cfg/rocas.toml", 1, 1);
+
+        tracker.on_event(created("/link/cfg/rocas.toml"), Instant::now(), &probe);
 
         assert_eq!(tracker.next_deadline(), None);
     }
