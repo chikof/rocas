@@ -435,9 +435,15 @@ struct Engine {
     tx: Sender<notify::Result<Event>>,
     loader: forgeconf::Loader<Config>,
     config_file: ConfigFile,
-    /// Whether the config directory carries a watch of its own, as opposed to
-    /// none or one that a watch root provides.
-    config_watched: bool,
+    /// The separate watch carrying config events: the config directory or,
+    /// while that is missing, its nearest existing ancestor. `None` when a
+    /// watch root provides it or reloading is off.
+    config_watch: Option<PathBuf>,
+    /// The config directory does not exist yet; its ancestor is watched.
+    config_waiting: bool,
+    /// The last directory the config watch could not be placed on, so a
+    /// persistent failure is logged once.
+    config_failed: Option<PathBuf>,
     /// When the pending config reload is due; each config event pushes it out.
     reload_at: Option<Instant>,
 }
@@ -448,9 +454,18 @@ const MIN_RELOAD_DEBOUNCE: Duration = Duration::from_millis(100);
 
 /// The config file as the watcher reports it.
 struct ConfigFile {
+    path: PathBuf,
     dir: PathBuf,
     /// Spellings of the file's path: some backends report canonical paths.
+    /// Only the configured spelling is known while the directory is missing.
     paths: Vec<PathBuf>,
+}
+
+/// The deepest existing directory on the way to `dir`, `dir` itself first.
+fn nearest_existing(dir: &Path) -> Option<PathBuf> {
+    dir.ancestors()
+        .find(|a| a.is_dir())
+        .map(Path::to_path_buf)
 }
 
 impl ConfigFile {
@@ -463,9 +478,15 @@ impl ConfigFile {
         if let (Some(name), Ok(canon)) = (path.file_name(), fs::canonicalize(&dir)) {
             paths.push(canon.join(name));
         }
-        paths.push(path);
+        paths.push(path.clone());
         paths.dedup();
-        Self { dir, paths }
+        Self { path, dir, paths }
+    }
+
+    /// The same file with its spellings looked up again, for after the
+    /// directory came into being.
+    fn refreshed(&self) -> Self {
+        Self::new(self.path.clone())
     }
 
     /// Whether `event` created, changed, renamed or removed the file. Reading
@@ -548,35 +569,84 @@ impl Engine {
         };
         let now = Instant::now();
         if self.config.misc.reload && self.config_file.concerns(&event) {
-            let window = Duration::from_millis(self.config.watcher.debounce_ms);
-            self.reload_at = Some(now + window.max(MIN_RELOAD_DEBOUNCE));
+            self.schedule_reload(now);
         }
+        self.config_dir_changed(&event, now);
         self.tracker
             .on_event(event, now, &FsProbe);
     }
 
-    /// Watches the config file's directory for reload events only. It is
-    /// not a root unless the config names it as one, and then that watch
-    /// already covers it.
+    /// Watches for the config file's directory, or while it does not exist
+    /// yet its nearest existing ancestor, so a directory created later is
+    /// noticed instead of reloads staying off. The watch is non-recursive and
+    /// only added where no watch root already provides it; it moves to the
+    /// next level down as each missing directory appears, so an idle daemon
+    /// still never wakes.
     fn watch_config_dir(&mut self) {
-        let dir = &self.config_file.dir;
-        let reload = self.config.misc.reload;
-        let covered = roots(&self.config)
-            .iter()
-            .any(|(p, _)| p == dir);
-        if reload && !covered && !self.config_watched {
-            match self.fs.watch(dir, false) {
-                Ok(()) => self.config_watched = true,
-                Err(e) => {
-                    debug!("Config reload unavailable: cannot watch '{}': {e}", dir.display());
-                },
-            }
-        } else if self.config_watched && (!reload || covered) {
-            if !reload && let Err(e) = self.fs.unwatch(dir) {
-                debug!("Unwatching '{}': {e}", dir.display());
-            }
-            self.config_watched = false;
+        let want = self
+            .config
+            .misc
+            .reload
+            .then(|| nearest_existing(&self.config_file.dir))
+            .flatten();
+        self.config_waiting = want
+            .as_ref()
+            .is_some_and(|dir| *dir != self.config_file.dir);
+        let want = want.filter(|dir| !self.covered(dir));
+
+        if let Some(old) = self
+            .config_watch
+            .take_if(|old| want.as_ref() != Some(old))
+            && !self.covered(&old)
+            && let Err(e) = self.fs.unwatch(&old)
+        {
+            debug!("Unwatching '{}': {e}", old.display());
         }
+        let Some(dir) = want.filter(|dir| self.config_watch.as_ref() != Some(dir)) else {
+            return;
+        };
+        match self.fs.watch(&dir, false) {
+            Ok(()) => self.config_watch = Some(dir),
+            Err(e) => {
+                if self
+                    .config_failed
+                    .replace(dir.clone())
+                    .as_ref()
+                    != Some(&dir)
+                {
+                    warn!("Config reload unavailable: cannot watch '{}': {e}", dir.display());
+                }
+            },
+        }
+    }
+
+    /// Whether a watch root already delivers the events of `dir`.
+    fn covered(&self, dir: &Path) -> bool {
+        roots(&self.config)
+            .iter()
+            .any(|(root, recursive)| root == dir || (*recursive && dir.starts_with(root)))
+    }
+
+    /// Moves the config watch down once a missing config directory appears,
+    /// and picks up a config file that was written in the meantime.
+    fn config_dir_changed(&mut self, event: &Event, now: Instant) {
+        let appeared =
+            matches!(event.kind, EventKind::Create(_) | EventKind::Modify(ModifyKind::Name(_)));
+        if !(self.config_waiting && appeared) {
+            return;
+        }
+        self.watch_config_dir();
+        if !self.config_waiting {
+            self.config_file = self.config_file.refreshed();
+            self.tracker
+                .protect(self.config_file.paths.clone());
+            self.schedule_reload(now);
+        }
+    }
+
+    fn schedule_reload(&mut self, now: Instant) {
+        let window = Duration::from_millis(self.config.watcher.debounce_ms);
+        self.reload_at = Some(now + window.max(MIN_RELOAD_DEBOUNCE));
     }
 
     fn next_deadline(&self) -> Option<Instant> {
@@ -631,7 +701,7 @@ impl Engine {
                 Ok(fs) => {
                     self.fs = fs;
                     self.watched.clear();
-                    self.config_watched = false;
+                    self.config_watch = None;
                 },
                 Err(e) => error!("Cannot switch the watch backend: {e}"),
             }
@@ -702,7 +772,9 @@ pub fn run(config: Config, loader: forgeconf::Loader<Config>) -> Result<(), AppE
         tx,
         loader,
         config_file: ConfigFile::new(config::config_path()),
-        config_watched: false,
+        config_watch: None,
+        config_waiting: false,
+        config_failed: None,
         reload_at: None,
     };
 

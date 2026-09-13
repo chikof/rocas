@@ -174,7 +174,7 @@ The first rule whose pattern matches a file wins. A pattern without `/` is match
 
 ### Reloading the configuration
 
-With `reload = true` (the default), rocas reloads `rocas.toml` shortly after you save it. It listens for file-system events on the config directory, so an idle rocas does not poll the file; with `poll = true` that directory is polled like the watched ones. Editors that save by replacing the file are handled, and so is creating `rocas.toml` after rocas has started. New rules, destinations and the settings above apply without a restart. If the new file is invalid, rocas logs the error and keeps running with the previous configuration.
+With `reload = true` (the default), rocas reloads `rocas.toml` shortly after you save it. It listens for file-system events on the config directory, so an idle rocas does not poll the file; with `poll = true` that directory is polled like the watched ones. Editors that save by replacing the file are handled, and so is creating `rocas.toml` after rocas has started, even when its directory does not exist yet: rocas then watches the nearest existing parent directory (not recursively) until the directory appears, and moves the watch down to it. New rules, destinations and the settings above apply without a restart. If the new file is invalid, rocas logs the error and keeps running with the previous configuration.
 
 ### Updates
 

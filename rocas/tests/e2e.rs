@@ -90,7 +90,12 @@ impl Sandbox {
     }
 
     fn start(&self) -> Daemon {
+        self.start_with(&[])
+    }
+
+    fn start_with(&self, args: &[&str]) -> Daemon {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_rocas"));
+        cmd.args(args);
         for (key, _) in env::vars_os() {
             if key
                 .to_string_lossy()
@@ -378,4 +383,32 @@ fn the_config_file_is_never_organised_but_its_neighbours_are() {
         "{}",
         sb.log_text()
     );
+}
+
+#[test]
+fn a_config_directory_created_after_startup_is_picked_up() {
+    let sb = Sandbox::new();
+    let inbox = sb.inbox();
+    let log = sb.log();
+    let mut d = sb.start_with(&[
+        "--watcher.watch-path",
+        inbox.to_str().unwrap(),
+        "--misc.log-file",
+        log.to_str().unwrap(),
+        "--no-misc.check-for-updates",
+    ]);
+    let config_dir = sb
+        .config_file()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    assert!(!config_dir.exists(), "the daemon must not create the config directory");
+    thread::sleep(Duration::from_millis(3 * SETTLE_MS));
+    assert!(d.0.try_wait().unwrap().is_none(), "the daemon exited");
+
+    sb.configure("", &[("*.pdf", &sb.docs())]);
+    sb.wait_for_log("Config reloaded: 1 rule(s)");
+
+    fs::write(inbox.join("late.pdf"), "l").unwrap();
+    wait_until("late.pdf in docs", || sb.docs().join("late.pdf").exists());
 }
