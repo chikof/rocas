@@ -412,3 +412,33 @@ fn a_config_directory_created_after_startup_is_picked_up() {
     fs::write(inbox.join("late.pdf"), "l").unwrap();
     wait_until("late.pdf in docs", || sb.docs().join("late.pdf").exists());
 }
+
+#[test]
+fn the_poll_backend_moves_a_dropped_file() {
+    let sb = Sandbox::new();
+    sb.configure("", &[("*.pdf", &sb.docs())]);
+    let daemon = sb.start_with(&["--watcher.poll", "--watcher.interval-millis", "100"]);
+    #[cfg(target_os = "linux")]
+    assert!(!has_inotify(&daemon), "the poll backend must not use inotify");
+
+    fs::write(sb.inbox().join("a.pdf"), "polled").unwrap();
+
+    wait_until("a.pdf in docs", || sb.docs().join("a.pdf").exists());
+    assert_eq!(fs::read_to_string(sb.docs().join("a.pdf")).unwrap(), "polled");
+    assert_eq!(names(&sb.inbox()), Vec::<String>::new());
+    drop(daemon);
+}
+
+/// Whether the daemon holds an inotify instance, which only the native backend
+/// creates.
+#[cfg(target_os = "linux")]
+fn has_inotify(daemon: &Daemon) -> bool {
+    fs::read_dir(format!("/proc/{}/fd", daemon.0.id()))
+        .unwrap()
+        .filter_map(|fd| fs::read_link(fd.unwrap().path()).ok())
+        .any(|target| {
+            target
+                .to_string_lossy()
+                .contains("inotify")
+        })
+}
