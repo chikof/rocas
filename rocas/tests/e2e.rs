@@ -442,3 +442,74 @@ fn has_inotify(daemon: &Daemon) -> bool {
                 .contains("inotify")
         })
 }
+
+/// Removes a directory tree on drop, for fixtures outside the sandbox.
+struct RemoveOnDrop(PathBuf);
+
+impl Drop for RemoveOnDrop {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_move_across_filesystems_keeps_both_files_and_leaves_no_temp() {
+    use std::os::unix::fs::MetadataExt as _;
+
+    const SIZE: usize = 16 << 20;
+    let shm = Path::new("/dev/shm");
+    let mut sb = Sandbox::new();
+    let dest = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "rocas-xdev-{}-{}",
+        std::process::id(),
+        sb.root
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+    ));
+    fs::create_dir_all(&dest).unwrap();
+    let _dest_cleanup = RemoveOnDrop(dest.clone());
+    let same_device = fs::metadata(shm).map(|shm| shm.dev() == fs::metadata(&dest).unwrap().dev());
+    if same_device.unwrap_or(true) {
+        eprintln!("skipped: /dev/shm is missing or on the same device as {}", dest.display());
+        return;
+    }
+
+    let inbox = shm.join(format!(
+        "rocas-xdev-{}",
+        sb.root
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+    ));
+    fs::create_dir_all(&inbox).unwrap();
+    let _inbox_cleanup = RemoveOnDrop(inbox.clone());
+    sb.watch.clone_from(&inbox);
+    sb.configure("", &[("*.txt", &dest)]);
+    fs::write(dest.join("x.txt"), "old").unwrap();
+    let _d = sb.start();
+
+    let body: Vec<u8> = (0..SIZE)
+        .map(|i| u8::try_from(i % 251).unwrap())
+        .collect();
+    let source = inbox.join("x.txt");
+    fs::write(&source, &body).unwrap();
+
+    let landed = dest.join("x (1).txt");
+    wait_until("the source to be removed", || {
+        if source.exists() {
+            if let Ok(meta) = fs::metadata(&landed) {
+                assert_eq!(meta.len(), SIZE as u64, "the destination appeared incomplete");
+            }
+            false
+        } else {
+            true
+        }
+    });
+
+    assert_eq!(fs::read(&landed).unwrap(), body);
+    assert_eq!(fs::read_to_string(dest.join("x.txt")).unwrap(), "old");
+    assert_eq!(names(&dest), ["x (1).txt", "x.txt"]);
+    assert_eq!(names(&inbox), Vec::<String>::new());
+}
