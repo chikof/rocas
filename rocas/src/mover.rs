@@ -6,9 +6,15 @@
 //! impossible (another filesystem, FAT, some network mounts) the file is
 //! copied to a temporary file in the destination directory first and linked
 //! into place from there.
+//!
+//! The source is only removed once the destination is complete: the copy is
+//! flushed to disk and checked against the source having changed meanwhile,
+//! it is linked into place, and the directory entry is flushed. A crash or an
+//! error before that point leaves the source untouched and at worst a stray
+//! `.rocas-*.tmp` file; after it, at worst both copies exist.
 
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, Metadata, OpenOptions};
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -98,7 +104,8 @@ fn remove_source(from: &Path, to: &Path) -> io::Result<()> {
     })
 }
 
-/// Copy fallback of [`place`]: temp file, fsync, no-clobber link, drop source.
+/// Copy fallback of [`place`]: temp file, fsync, no-clobber link, fsync of the
+/// directory entry, and only then the source is dropped.
 fn copy_into_place(from: &Path, to: &Path) -> io::Result<()> {
     let tmp = copy_to_temp(from, to)?;
     let linked = match fs::hard_link(&tmp, to) {
@@ -114,7 +121,28 @@ fn copy_into_place(from: &Path, to: &Path) -> io::Result<()> {
     };
     let _ = fs::remove_file(&tmp);
     linked?;
+    sync_dir(to).inspect_err(|_| {
+        let _ = fs::remove_file(to);
+    })?;
     remove_source(from, to)
+}
+
+/// Flushes the directory holding `to`, so that once the source is gone a
+/// crash cannot take the destination's name with it.
+fn sync_dir(to: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        File::open(
+            to.parent()
+                .unwrap_or_else(|| Path::new(".")),
+        )?
+        .sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = to;
+        Ok(())
+    }
 }
 
 /// Overwrite policy: replaces `to`, atomically where possible.
@@ -127,6 +155,7 @@ fn replace(from: &Path, to: &Path) -> io::Result<()> {
             fs::rename(&tmp, to).inspect_err(|_| {
                 let _ = fs::remove_file(&tmp);
             })?;
+            sync_dir(to)?;
             fs::remove_file(from)
         },
     }
@@ -157,7 +186,8 @@ fn copy_to_temp(from: &Path, to: &Path) -> io::Result<PathBuf> {
     };
 
     let result = io::copy(&mut src, &mut file)
-        .and_then(|_| file.set_permissions(meta.permissions()))
+        .and_then(|_| ensure_unchanged(&src, &meta))
+        .and_then(|()| file.set_permissions(meta.permissions()))
         .and_then(|()| match meta.modified() {
             Ok(time) => file.set_modified(time),
             Err(_) => Ok(()),
@@ -169,6 +199,17 @@ fn copy_to_temp(from: &Path, to: &Path) -> io::Result<PathBuf> {
             let _ = fs::remove_file(&tmp);
             Err(e)
         },
+    }
+}
+
+/// Fails if `src` was written to since `before` was read: what was copied may
+/// then be older than what is about to be deleted.
+fn ensure_unchanged(src: &File, before: &Metadata) -> io::Result<()> {
+    let now = src.metadata()?;
+    if now.len() == before.len() && now.modified().ok() == before.modified().ok() {
+        Ok(())
+    } else {
+        Err(io::Error::other("the file changed while it was being copied"))
     }
 }
 
@@ -387,5 +428,91 @@ mod tests {
             .collect();
         expected.sort();
         assert_eq!(bodies, expected);
+    }
+
+    #[test]
+    fn a_copy_into_a_missing_directory_keeps_the_source() {
+        let src = Dir::new();
+        let dest = Dir::new();
+        let from = src.file("a.txt", "new");
+
+        let err = copy_into_place(&from, &dest.0.join("gone/a.txt")).unwrap_err();
+
+        assert_eq!(err.kind(), ErrorKind::NotFound);
+        assert_eq!(src.read("a.txt"), "new");
+        assert_eq!(dest.names(), Vec::<String>::new());
+    }
+
+    /// Makes `dir` read-only; `false` when that has no effect (running as
+    /// root), in which case the test has nothing to show.
+    #[cfg(unix)]
+    fn lock(dir: &Dir) -> bool {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o555)).unwrap();
+        let enforced = fs::write(dir.0.join(".probe"), "").is_err();
+        if !enforced {
+            unlock(dir);
+            let _ = fs::remove_file(dir.0.join(".probe"));
+        }
+        enforced
+    }
+
+    #[cfg(unix)]
+    fn unlock(dir: &Dir) {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_into_a_read_only_directory_keeps_the_source() {
+        let src = Dir::new();
+        let dest = Dir::new();
+        let from = src.file("a.txt", "new");
+        if !lock(&dest) {
+            return;
+        }
+
+        let err = copy_into_place(&from, &dest.0.join("a.txt")).unwrap_err();
+        unlock(&dest);
+
+        assert_eq!(err.kind(), ErrorKind::PermissionDenied);
+        assert_eq!(src.read("a.txt"), "new");
+        assert_eq!(dest.names(), Vec::<String>::new());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_source_that_cannot_be_removed_stays_and_the_destination_is_withdrawn() {
+        let src = Dir::new();
+        let dest = Dir::new();
+        let from = src.file("a.txt", "new");
+        if !lock(&src) {
+            return;
+        }
+
+        let err = move_into(&from, &dest.0, OnConflict::Rename).unwrap_err();
+        unlock(&src);
+
+        assert_eq!(err.kind(), ErrorKind::PermissionDenied);
+        assert_eq!(src.read("a.txt"), "new");
+        assert_eq!(dest.names(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_file_written_to_during_the_copy_is_detected() {
+        let src = Dir::new();
+        let from = src.file("a.txt", "new");
+        let file = File::open(&from).unwrap();
+        let before = file.metadata().unwrap();
+        ensure_unchanged(&file, &before).unwrap();
+
+        let mut writer = OpenOptions::new()
+            .append(true)
+            .open(&from)
+            .unwrap();
+        io::Write::write_all(&mut writer, b" more").unwrap();
+
+        assert!(ensure_unchanged(&file, &before).is_err());
     }
 }
