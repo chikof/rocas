@@ -8,13 +8,13 @@ use std::path::Path;
 #[cfg(feature = "self-update")]
 use self_update::cargo_crate_version;
 
+#[cfg(feature = "self-update")]
 use crate::AppError;
 
+/// Without self-update there is nothing to check.
 #[cfg(not(feature = "self-update"))]
-#[expect(clippy::unnecessary_wraps, reason = "same signature as the self-update build")]
-pub fn check(_auto_update: bool) -> Result<(), AppError> {
+pub fn spawn(_auto_update: bool) {
     debug!("Built without self-update; updates come from the package manager.");
-    Ok(())
 }
 
 #[cfg(feature = "self-update")]
@@ -30,6 +30,14 @@ pub fn check(_auto_update: bool) -> Result<(), AppError> {
 /// On Unix this is a true `execv`: the kernel atomically replaces the process
 /// image, the PID is unchanged, and no child process is created. It only
 /// returns on error.
+///
+/// This runs on the update-check thread, not the main one. `execv` replaces
+/// the whole process whichever thread calls it: the event loop, the watcher
+/// and every other thread are gone the instant it succeeds, and the new image
+/// starts from scratch (a fresh watcher, a fresh config load). A move cut off
+/// mid-copy loses nothing, as the mover removes the source only after the
+/// destination is complete; the file is picked up again when it next changes
+/// or, with `scan_on_start`, at startup.
 ///
 /// On Windows `execv` does not exist. A new process is spawned with
 /// `CreateProcess` and the current one exits with code 0 — the closest safe
@@ -77,9 +85,25 @@ fn restart(exe: &Path) -> Result<(), AppError> {
 }
 
 #[cfg(feature = "self-update")]
+/// Runs [`check`] on a background thread so a slow or absent network never
+/// delays watching. Failures are logged, not fatal.
+pub fn spawn(auto_update: bool) {
+    let started = std::thread::Builder::new()
+        .name("update-check".into())
+        .spawn(move || {
+            if let Err(e) = check(auto_update) {
+                warn!("Update check failed: {e}");
+            }
+        });
+    if let Err(e) = started {
+        warn!("Cannot start the update check: {e}");
+    }
+}
+
+#[cfg(feature = "self-update")]
 /// Checks GitHub for a newer release and optionally performs an in-place
-/// update.
-pub fn check(auto_update: bool) -> Result<(), AppError> {
+/// update; an update ends in [`restart`], which does not return on success.
+fn check(auto_update: bool) -> Result<(), AppError> {
     let releases = self_update::backends::github::ReleaseList::configure()
         .repo_owner("chikof")
         .repo_name("rocas")

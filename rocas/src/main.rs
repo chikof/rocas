@@ -62,9 +62,5 @@ fn main() -> Result<(), AppError> {
         config.misc.log_keep_files,
     )?;
 
-    if config.misc.check_for_updates {
-        update::check(config.misc.auto_update)?;
-    }
-
     engine::run(config, loader)
 }

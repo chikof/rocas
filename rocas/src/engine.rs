@@ -17,11 +17,11 @@ use std::{fs, io};
 use notify::event::{ModifyKind, RenameMode};
 use notify::{Event, EventKind};
 
-use crate::AppError;
 use crate::config::{self, Config};
 use crate::mover::{self, Moved};
 use crate::pattern::Pattern;
 use crate::watch::FsWatcher;
+use crate::{AppError, update};
 
 /// What the tracker needs to know about a path on disk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -793,6 +793,9 @@ pub fn run(config: Config, loader: forgeconf::Loader<Config>) -> Result<(), AppE
     engine
         .config
         .print_startup_banner(&paths);
+    if engine.config.misc.check_for_updates {
+        update::spawn(engine.config.misc.auto_update);
+    }
 
     loop {
         let msg = match engine.next_deadline() {

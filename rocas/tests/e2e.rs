@@ -94,8 +94,13 @@ impl Sandbox {
     }
 
     fn start_with(&self, args: &[&str]) -> Daemon {
+        self.start_with_env(args, &[])
+    }
+
+    fn start_with_env(&self, args: &[&str], envs: &[(&str, &str)]) -> Daemon {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_rocas"));
-        cmd.args(args);
+        cmd.args(args)
+            .envs(envs.iter().copied());
         for (key, _) in env::vars_os() {
             if key
                 .to_string_lossy()
@@ -512,4 +517,39 @@ fn a_move_across_filesystems_keeps_both_files_and_leaves_no_temp() {
     assert_eq!(fs::read_to_string(dest.join("x.txt")).unwrap(), "old");
     assert_eq!(names(&dest), ["x (1).txt", "x.txt"]);
     assert_eq!(names(&inbox), Vec::<String>::new());
+}
+
+/// With update checks on, a network that never answers must not delay
+/// watching: the check runs after the watcher is up, on its own thread.
+#[cfg(feature = "self-update")]
+#[test]
+fn a_hanging_update_check_does_not_delay_watching() {
+    use std::net::TcpListener;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    let sb = Sandbox::new();
+    sb.configure("", &[("*.pdf", &sb.docs())]);
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
+    let accepted = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&accepted);
+    thread::spawn(move || {
+        let mut held = Vec::new();
+        for stream in proxy.incoming().flatten() {
+            held.push(stream);
+            counter.fetch_add(1, Ordering::SeqCst);
+        }
+    });
+
+    let started = Instant::now();
+    let _d = sb.start_with_env(
+        &["--misc.check-for-updates"],
+        &[("HTTPS_PROXY", &proxy_url), ("https_proxy", &proxy_url)],
+    );
+    assert!(started.elapsed() < Duration::from_secs(5), "startup took {:?}", started.elapsed());
+
+    fs::write(sb.inbox().join("a.pdf"), "a").unwrap();
+    wait_until("a.pdf in docs", || sb.docs().join("a.pdf").exists());
+    wait_until("the update check to reach the network", || accepted.load(Ordering::SeqCst) > 0);
 }
