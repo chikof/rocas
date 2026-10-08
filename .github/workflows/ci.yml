@@ -34,6 +34,9 @@ jobs:
       - name: Run the gate
         run: scripts/check.sh
 
+      - name: Build the release binary
+        run: cargo build --release --locked
+
   msrv:
     runs-on: ubuntu-latest
     steps:
