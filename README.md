@@ -204,8 +204,10 @@ Toggles launching rocas when you log in (run it again to turn it off), then keep
 - **`interval_millis` only applies with `poll = true`.** It used to have no effect on native watching. rocas now uses OS notifications and does not wake up while idle unless you enable `poll`.
 - **Partial downloads are ignored.** Files matching the default `ignore` list are not moved. If you relied on moving one of those names, set `ignore` to your own list.
 - **The config reloads on change.** Set `reload = false` to disable that.
+- **rocas never moves its own config file.** A rule such as `*.toml` over a watch directory that contains `rocas.toml` (for example `~/.config`, watched recursively) skips that one file, however the path is spelled, while other files still match. Editing it triggers one reload.
 - **`watch_path` is optional** and defaults to your Downloads directory; `log_file` defaults to `rocas.log` next to the config file.
-- **Nix:** `programs.rocas.watcher.watchPath` defaults to `null` (your Downloads directory) and the NixOS service reads `/etc/rocas/rocas.toml`.
+- **Nix:** `programs.rocas.watcher.watchPath` defaults to `null` (your Downloads directory).
+- **NixOS service:** the module writes the config to `/etc/rocas/rocas.toml` and runs rocas with `XDG_CONFIG_HOME=/etc`, so rocas reads it from there instead of a per-user config directory. The service has `StateDirectory=rocas`, and `services.rocas.misc.logFile` defaults to `/var/lib/rocas/rocas.log` rather than a file next to the config. Setting it to `null` gives rocas's own default (next to the config), which the service's read-only `/etc` does not allow.
 
 
 ## Contributing
