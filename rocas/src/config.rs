@@ -48,7 +48,7 @@ pub fn loader(cli_args: Vec<OsString>) -> forgeconf::Loader<Config> {
 /// Rocas watches directories and moves files into folders based on rules.
 ///
 /// Also: -b, --boot toggles starting rocas on boot, then keeps running;
-/// -V, --version prints the version.
+/// -V, --version prints the version; --setup runs the setup wizard.
 #[derive(Debug, Clone, PartialEq, forgeconf::Config)]
 #[config(file(path = config_path(), optional), env_prefix = "ROCAS_")]
 pub struct Config {
@@ -196,7 +196,7 @@ pub enum OnConflict {
 }
 
 impl OnConflict {
-    const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Rename => "rename",
             Self::Skip => "skip",
@@ -376,14 +376,18 @@ impl Config {
     }
 }
 
-pub fn startup_toggle() -> Result<(), AppError> {
-    let conf = AutoLaunchBuilder::new()
+fn auto_launch() -> Result<auto_launch::AutoLaunch, AppError> {
+    Ok(AutoLaunchBuilder::new()
         .set_app_name("Rocas")
         .set_app_path(&rocas_path()?)
         .set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent)
         .set_windows_enable_mode(auto_launch::WindowsEnableMode::Dynamic)
         .set_linux_launch_mode(auto_launch::LinuxLaunchMode::Systemd)
-        .build()?;
+        .build()?)
+}
+
+pub fn startup_toggle() -> Result<(), AppError> {
+    let conf = auto_launch()?;
 
     if conf.is_enabled()? {
         conf.disable()?;
@@ -394,6 +398,17 @@ pub fn startup_toggle() -> Result<(), AppError> {
     }
 
     Ok(())
+}
+
+/// Turns starting on login on if it is off; never turns it off. Returns
+/// whether it was switched on just now.
+pub fn ensure_startup_enabled() -> Result<bool, AppError> {
+    let conf = auto_launch()?;
+    if conf.is_enabled()? {
+        return Ok(false);
+    }
+    conf.enable()?;
+    Ok(true)
 }
 
 fn rocas_path() -> Result<String, AppError> {

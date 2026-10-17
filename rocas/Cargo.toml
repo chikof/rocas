@@ -30,7 +30,7 @@ self_update = { version = "0.44.0", optional = true, default-features = false, f
     "compression-flate2",
     "compression-zip-deflate",
 ] }
-forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "ab1fe694fbd2531ce7c953eae3386da65ff04140" }
+forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "06f87202b2570fe04cded54752f22c5d7591fb6d" }
 notify = "8.2.0"
 
 [target.'cfg(unix)'.dependencies]
