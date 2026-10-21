@@ -7,6 +7,7 @@ mod engine;
 mod logger;
 mod mover;
 mod pattern;
+mod setup;
 mod update;
 mod watch;
 
@@ -45,6 +46,9 @@ fn main() -> Result<(), AppError> {
     let args = args::parse(std::env::args_os().collect());
     if args.version {
         println!("rocas {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if let setup::Flow::Exit = setup::dispatch(&args)? {
         return Ok(());
     }
 

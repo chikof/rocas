@@ -30,12 +30,14 @@ self_update = { version = "0.44.0", optional = true, default-features = false, f
     "compression-flate2",
     "compression-zip-deflate",
 ] }
-forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "06f87202b2570fe04cded54752f22c5d7591fb6d" }
+forgeconf = { git = "https://github.com/chikof/forgeconf.git", rev = "c622f5542a497d74bb88655cf5daa0d4006464cc" }
 notify = "8.2.0"
+crossterm = { version = "0.29", default-features = false, features = ["events"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.182"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+crossterm = { version = "0.29", default-features = false, features = ["windows"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Console"] }
 

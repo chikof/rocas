@@ -1,8 +1,8 @@
 //! Pre-parsing of the actions that are not settings.
 //!
-//! `--boot` and `--version` are actions, not configuration: they are taken
-//! out of argv before forgeconf sees it, so a file or environment value can
-//! never toggle autostart on every launch. A token that is the value of a
+//! `--boot`, `--version` and `--setup` are actions, not configuration: they are
+//! taken out of argv before forgeconf sees it, so a file or environment value
+//! can never toggle autostart on every launch. A token that is the value of a
 //! preceding value-taking flag (`--watcher.watch-path -b`) is left alone.
 
 use std::ffi::OsString;
@@ -16,6 +16,8 @@ use crate::config::Config;
 pub struct Args {
     /// `--boot` / `-b` was given.
     pub boot: bool,
+    /// `--setup` was given.
+    pub setup: bool,
     /// `--version` / `-V` was given.
     pub version: bool,
     /// Everything else, program name first, for the config loader.
@@ -34,6 +36,7 @@ pub fn parse(argv: Vec<OsString>) -> Args {
     let flags = flags();
     let mut out = Args {
         boot: false,
+        setup: false,
         version: false,
         rest: Vec::with_capacity(argv.len()),
     };
@@ -44,6 +47,10 @@ pub fn parse(argv: Vec<OsString>) -> Args {
         let consumes = match token.to_str() {
             Some("--boot" | "-b") => {
                 out.boot = true;
+                continue;
+            },
+            Some("--setup") => {
+                out.setup = true;
                 continue;
             },
             Some("--version" | "-V") => {
@@ -158,6 +165,55 @@ mod tests {
         (args.boot, args.version, rest)
     }
 
+    fn setup_flag(tokens: &[&str]) -> (bool, Vec<String>) {
+        let args = parse(
+            tokens
+                .iter()
+                .map(OsString::from)
+                .collect(),
+        );
+        let rest = args
+            .rest
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        (args.setup, rest)
+    }
+
+    #[test]
+    fn setup_is_taken_out_of_argv() {
+        assert_eq!(setup_flag(&["rocas", "--setup"]), (true, vec!["rocas".into()]));
+        assert_eq!(
+            setup_flag(&["rocas", "--misc.log-level", "debug", "--setup"]),
+            (true, vec!["rocas".into(), "--misc.log-level".into(), "debug".into()])
+        );
+    }
+
+    #[test]
+    fn setup_is_off_by_default() {
+        assert!(!setup_flag(&["rocas"]).0);
+    }
+
+    #[test]
+    fn setup_as_a_value_is_kept() {
+        let (setup, rest) = setup_flag(&["rocas", "--misc.log-file", "--setup"]);
+        assert!(!setup);
+        assert_eq!(rest, ["rocas", "--misc.log-file", "--setup"]);
+    }
+
+    #[test]
+    fn bool_flag_does_not_consume_setup() {
+        let (setup, rest) = setup_flag(&["rocas", "--watcher.recursive", "--setup"]);
+        assert!(setup);
+        assert_eq!(rest, ["rocas", "--watcher.recursive"]);
+    }
+
+    #[test]
+    fn inline_value_does_not_consume_setup() {
+        let (setup, rest) = setup_flag(&["rocas", "--watcher.watch-path=x", "--setup"]);
+        assert!(setup);
+        assert_eq!(rest, ["rocas", "--watcher.watch-path=x"]);
+    }
     #[test]
     fn long_boot() {
         assert_eq!(parsed(&["rocas", "--boot"]), (true, false, vec!["rocas".into()]));
