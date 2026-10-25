@@ -197,6 +197,21 @@ rocas --boot   # or: rocas -b
 
 Toggles launching rocas when you log in (run it again to turn it off), then keeps running as usual. `--boot` is an action, not a setting: it is never read from the config file or the environment.
 
+### Setup wizard
+
+```sh
+rocas --setup
+```
+
+Asks a few questions in the terminal and writes `rocas.toml` for you: which folders to watch (and whether to look inside subfolders), which preset rules to turn on (Documents, Images, Videos, Audio, Archives, Installers, each with a destination you can change), what to do when a name already exists at the destination, and whether to start rocas when you log in. In builds with self-update it also asks whether to look for updates. The last screen shows the exact file before anything is written.
+
+- **Keys.** `Up`/`Down` (or `k`/`j`) move, `Space` toggles, `Enter` confirms or edits, `Tab`/`Right` go to the next screen, `Shift-Tab`/`Left`/`Backspace` to the previous one. In a text field `Esc` cancels. `q` (outside a text field) or `Ctrl-C` quits without writing anything.
+- **Presets.** Matching is case-sensitive, so each preset lists every extension in lower and upper case (`*.jpg`, `*.JPG`). Edit the file to add other spellings or extensions.
+- **Existing file.** If `rocas.toml` already exists, the review screen says so and asks `y` before replacing it. The file is written to a temporary name and renamed, so a running rocas never reads half of it.
+- **Start on login.** Turned on only if it is off; the wizard never turns it off. Use `rocas --boot` to toggle it.
+- **First run.** Running plain `rocas` in a terminal with no config file asks `Run setup now? [Y/n]`, then goes on to start rocas. Nothing is asked when rocas runs from a service, from autostart, in a pipe, or with any other option.
+- **Windows.** rocas has no console of its own, so `--setup` attaches to the one it was started from, or opens a new window when there is none. Start it with `start /wait rocas --setup` in cmd (or `Start-Process -Wait rocas --setup` in PowerShell) so the shell does not compete for your keystrokes.
+
 ## Upgrading from 1.x
 
 - **`rocas boot` is now `rocas --boot`** (or `-b`).
