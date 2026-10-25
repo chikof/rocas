@@ -12,7 +12,7 @@ winres = "0.1"
 [dependencies]
 log.workspace = true
 auto-launch = "0.6.0"
-dirs = "6.0.0"
+dirs = "7.0.0"
 thiserror = "2.0.18"
 self_update = { version = "0.44.0", default-features = false, features = [
     "reqwest",
