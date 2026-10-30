@@ -53,3 +53,32 @@ jobs:
 
       - name: Check on MSRV
         run: cargo check --workspace --locked
+
+  # Builds and lints the platform-specific code (Windows console, macOS paths).
+  # Tests run on Linux only: the e2e tests isolate the config directory through
+  # XDG_CONFIG_HOME, which macOS and Windows ignore.
+  platforms:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo directories
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rocas-${{ matrix.os }}
+
+      - name: Clippy with self-update
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Clippy without self-update
+        run: cargo clippy --workspace --all-targets --no-default-features --locked -- -D warnings
