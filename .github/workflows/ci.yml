@@ -82,3 +82,9 @@ jobs:
 
       - name: Clippy without self-update
         run: cargo clippy --workspace --all-targets --no-default-features --locked -- -D warnings
+
+      - name: Unit tests
+        run: cargo test -p rocas --bins --locked
+
+      - name: Build the release binary
+        run: cargo build --release --locked
