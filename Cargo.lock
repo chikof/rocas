@@ -553,16 +553,18 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "forgeconf"
-version = "0.5.0"
-source = "git+https://github.com/chikof/forgeconf.git?rev=45c622b946a2dd7e7dbc9daec8735df9bbabd3f7#45c622b946a2dd7e7dbc9daec8735df9bbabd3f7"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d6f39c7b236db56f23b015bd51684b190361b4fb12e092f71ba8041280e2fd6"
 dependencies = [
  "forgeconf_macros",
 ]
 
 [[package]]
 name = "forgeconf_macros"
-version = "0.5.0"
-source = "git+https://github.com/chikof/forgeconf.git?rev=45c622b946a2dd7e7dbc9daec8735df9bbabd3f7#45c622b946a2dd7e7dbc9daec8735df9bbabd3f7"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d4ae95bffc874eeabd41dce9ed95993bd9b3219c0e23265e36e68b026020be"
 dependencies = [
  "proc-macro2",
  "quote",
