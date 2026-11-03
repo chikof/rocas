@@ -132,6 +132,10 @@ fn check(auto_update: bool) -> Result<(), AppError> {
                 .repo_name("rocas")
                 .bin_name("rocas")
                 .current_version(current)
+                // auto_update is the consent; a daemon has nobody to answer a
+                // prompt, and rocas logs the outcome itself.
+                .no_confirm(true)
+                .show_output(false)
                 .build()?
                 .update()?;
 
