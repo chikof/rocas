@@ -11,11 +11,13 @@ tag-message = ""
 # {{version}} is substituted correctly at crate level (non-consolidated).
 pre-release-commit-message = "chore(release): v{{version}}"
 
-# Run git-cliff before the release commit to regenerate CHANGELOG.md.
-# The hook runs from WORKSPACE_ROOT; git-cliff will write CHANGELOG.md there.
+# Run git-cliff before the release commit to regenerate rocas/CHANGELOG.md.
+# The hook runs from the crate directory, where git-cliff would only list
+# commits touching rocas/; --include-path keeps CI, nix and docs commits too.
 # cargo-release automatically stages any modified tracked files before committing.
 pre-release-hook = [
   "git-cliff",
+  "--include-path", "**",
   "--tag", "v{{version}}",
   "--output", "CHANGELOG.md",
 ]
