@@ -449,8 +449,10 @@ fn has_inotify(daemon: &Daemon) -> bool {
 }
 
 /// Removes a directory tree on drop, for fixtures outside the sandbox.
+#[cfg(unix)]
 struct RemoveOnDrop(PathBuf);
 
+#[cfg(unix)]
 impl Drop for RemoveOnDrop {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);

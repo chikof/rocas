@@ -129,6 +129,10 @@ fn copy_into_place(from: &Path, to: &Path) -> io::Result<()> {
 
 /// Flushes the directory holding `to`, so that once the source is gone a
 /// crash cannot take the destination's name with it.
+#[cfg_attr(
+    not(unix),
+    expect(clippy::unnecessary_wraps, reason = "fallible on Unix, where the directory is fsynced")
+)]
 fn sync_dir(to: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
