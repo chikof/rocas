@@ -296,6 +296,14 @@ mod tests {
     use crate::setup::answers::{Answers, test_dirs};
     use crate::setup::wizard::Key;
 
+    /// `/home/u` joined with `rel` as the screen shows it: `\` on Windows.
+    fn home(rel: &str) -> String {
+        PathBuf::from("/home/u")
+            .join(rel)
+            .display()
+            .to_string()
+    }
+
     fn wizard(existing: bool) -> Wizard {
         Wizard::new(Answers::defaults(&test_dirs()), PathBuf::from("/c/rocas.toml"), existing)
     }
@@ -348,7 +356,7 @@ mod tests {
             .filter(|l| l.style == Style::Selected)
             .collect();
         assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].text, "> /home/u/Downloads");
+        assert_eq!(selected[0].text, format!("> {}", home("Downloads")));
         assert!(texts(&lines).contains(&"  + Add a folder"));
         assert!(texts(&lines).contains(&"  [ ] Also watch inside subfolders"));
     }
@@ -371,8 +379,10 @@ mod tests {
         keys(&mut w, &[Key::Tab, Key::Tab, Key::Char(' '), Key::Down]);
         let lines = render(&w, 100, 24);
         let all = texts(&lines);
-        assert!(all.contains(&"  [ ] Documents   /home/u/Documents"));
-        assert!(all.contains(&"> [x] Images      /home/u/Pictures"));
+        let documents = format!("  [ ] Documents   {}", home("Documents"));
+        let images = format!("> [x] Images      {}", home("Pictures"));
+        assert!(all.contains(&documents.as_str()));
+        assert!(all.contains(&images.as_str()));
         assert!(
             all.iter()
                 .any(|l| l.starts_with("Matches: *.jpg *.JPG"))

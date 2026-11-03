@@ -493,7 +493,11 @@ mod tests {
     fn editing_a_destination() {
         let mut w = wizard(false);
         press(&mut w, &[Key::Tab, Key::Tab, Key::Down, Key::Enter]);
-        assert_eq!(w.edit.as_ref().map(|e| e.text.as_str()), Some("/home/u/Pictures"));
+        let pictures = std::path::Path::new("/home/u")
+            .join("Pictures")
+            .display()
+            .to_string();
+        assert_eq!(w.edit.as_ref().map(|e| e.text.as_str()), Some(pictures.as_str()));
         // Esc keeps the original; start again and append.
         press(&mut w, &[Key::Esc]);
         assert!(w.edit.is_none());
