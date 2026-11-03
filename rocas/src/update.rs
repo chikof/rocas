@@ -111,12 +111,12 @@ fn check(auto_update: bool) -> Result<(), AppError> {
         .fetch()?;
 
     let latest = releases
-        .first()
+        .latest()
         .ok_or_else(|| AppError::Other("GitHub returned an empty release list".to_string()))?;
     let current = cargo_crate_version!();
 
-    if self_update::version::bump_is_greater(current, &latest.version)? {
-        info!("New version available: {} → {}", current, latest.version);
+    if self_update::version::bump_is_greater(current, latest.version())? {
+        info!("New version available: {} → {}", current, latest.version());
         warn!(
             "To update manually update or set the 'misc.auto_update' option in the config to true."
         );
@@ -131,16 +131,15 @@ fn check(auto_update: bool) -> Result<(), AppError> {
                 .repo_owner("chikof")
                 .repo_name("rocas")
                 .bin_name("rocas")
-                .show_download_progress(true)
                 .current_version(current)
                 .build()?
                 .update()?;
 
-            info!("Updated to version {}. Restarting…", latest.version);
+            info!("Updated to version {}. Restarting…", latest.version());
             restart(&exe)?;
         }
     } else {
-        trace!("No update available (current: {}, latest: {})", current, latest.version);
+        trace!("No update available (current: {}, latest: {})", current, latest.version());
     }
 
     Ok(())

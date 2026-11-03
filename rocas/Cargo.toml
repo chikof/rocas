@@ -20,14 +20,13 @@ winres = "0.1"
 [dependencies]
 log.workspace = true
 auto-launch = "0.6.0"
-dirs = "6.0.0"
+dirs = "7.0.0"
 thiserror = "2.0.18"
-self_update = { version = "0.44.0", optional = true, default-features = false, features = [
+self_update = { version = "1.3.3", optional = true, default-features = false, features = [
+    "github",
     "reqwest",
     "rustls",
-    "archive-tar",
-    "archive-zip",
-    "compression-flate2",
+    "compression-tar-gz",
     "compression-zip-deflate",
 ] }
 forgeconf = "1.0.0"

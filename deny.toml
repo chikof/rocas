@@ -25,14 +25,3 @@ ignore = true
 unknown-registry = "deny"
 unknown-git = "deny"
 
-[advisories]
-# self_update 0.44.0, the latest release, pins zip 6 and quick-xml 0.38. Drop
-# these entries once it moves to zip >= 9 and quick-xml >= 0.41.
-ignore = [
-    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 via self_update; only parses release metadata fetched from our own GitHub releases" },
-    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38 via self_update; only parses release metadata fetched from our own GitHub releases" },
-    { id = "RUSTSEC-2026-0367", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
-    { id = "RUSTSEC-2026-0368", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
-    { id = "RUSTSEC-2026-0369", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
-    { id = "RUSTSEC-2026-0429", reason = "zip 6 via self_update; archives come from our own GitHub releases" },
-]
